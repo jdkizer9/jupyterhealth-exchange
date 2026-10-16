@@ -40,10 +40,44 @@ Users manage the system via the Web UI, and data producers receive invitation cr
 </p>
 
 
-## Getting Started
+## Quick Start with Docker (local development)
 
-> [!NOTE]
-> Getting started with Docker is in the works!
+Requires Docker with Compose v2.
+
+```
+docker compose build
+docker compose up
+```
+
+The first start migrates and seeds the database (about 30 seconds). Then browse to http://localhost:8000 and log in as `manager_mary@example.com` / `Jhe1234!`, or as `admin@example.com` / `Jhe1234!` for Django admin at http://localhost:8000/admin. See [Seed Data](docs/seed-data.md) for the other accounts.
+
+What's running:
+
+| service | what | host address |
+| --- | --- | --- |
+| `jhe` | Django dev server; reloads on code and template edits | http://localhost:8000 |
+| `db` | Postgres 16; data in `./local/db` (survives `docker compose down`) | `localhost:5432` |
+| `mcp` | the [MCP server](mcp_server/), wired to the local JHE | http://localhost:8401 |
+| `cron` | runs `ow_poll` every 15 minutes, like production | none |
+
+Emails (patient invitations, signup verification, login codes) print to `docker compose logs jhe`.
+
+Ports already in use? Override them per run, for example `JHE_PORT=8010 JHE_DB_PORT=5442 MCP_PORT=8411 docker compose up`. Everything that embeds the site URL follows `JHE_PORT`.
+
+Configuration lives in [compose/environment/](compose/environment/README.md). The committed values are public, local-only development values; never use them in a deployment.
+
+Helper scripts:
+
+| script | does |
+| --- | --- |
+| `scripts/dev/manage.sh <command>` | run a `manage.py` command in the `jhe` container |
+| `scripts/dev/shell.sh` | Django shell in the `jhe` container |
+| `scripts/dev/reset.sh` | wipe `./local/db` and start over with freshly seeded data |
+| `scripts/dev/test.sh [--fresh] [pytest args]` | backend tests against a disposable in-memory Postgres (needs [uv](https://docs.astral.sh/uv/)) |
+| `scripts/dev/check.sh [--quick]` | lint, format, missing-migration check and tests; what CI and pre-commit.ci will check |
+| `scripts/dev/bruno-token.sh` | API token for the [Bruno](https://www.usebruno.com/) collection in `opencollection/JHE/`, or for curl |
+
+## Getting Started (without Docker)
 
 1. Set up your Python environment and install dependencies with [uv](https://docs.astral.sh/uv/): `uv sync` - this project uses Django **version 5.2**
     - `uv sync` installs the exact versions from `uv.lock` into `.venv` (dev dependencies included by default; use `uv sync --no-dev` for a production-only install)

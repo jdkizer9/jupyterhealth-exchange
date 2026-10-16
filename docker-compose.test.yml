@@ -1,0 +1,31 @@
+# Disposable Postgres for the test suite. Used by scripts/dev/test.sh; not part of the
+# dev stack in docker-compose.yml.
+#
+# Separate compose project and network, data in RAM, durability off: fast, and it can
+# never touch your dev data. Pytest runs on the host (`uv run pytest`) against it, since
+# the production image deliberately has no dev dependencies.
+#
+# The container is left running between test runs so pytest's --reuse-db can skip
+# migrations. Stop it with:
+#   docker compose -f docker-compose.test.yml down
+
+name: jhe-test
+
+services:
+  test-db:
+    image: postgres:16 # matches CI (.github/workflows/be_test.yml)
+    environment:
+      # Same credentials as ci/test_env.sh.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_jhe_dev
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: ["postgres", "-c", "fsync=off", "-c", "full_page_writes=off", "-c", "synchronous_commit=off"]
+    ports:
+      - "127.0.0.1:${JHE_TEST_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d test_jhe_dev"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
