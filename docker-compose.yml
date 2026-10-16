@@ -22,7 +22,6 @@ name: jhe
 
 x-jhe-env-files: &jhe-env-files
   # Later files override earlier ones. See compose/environment/README.md.
-  - path: ci/test_env.sh
   - path: compose/environment/jhe.env
   - path: compose/environment/local.secret.env
     required: false

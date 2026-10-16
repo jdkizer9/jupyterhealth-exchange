@@ -8,20 +8,21 @@ there could let a deployment silently run on a public key).
 
 | file | committed | used by | holds |
 |---|---|---|---|
-| `../../ci/test_env.sh` | yes | `jhe`, `cron` | base values shared with CI, including the public test OIDC signing key |
-| `jhe.env` | yes | `jhe`, `cron` | overrides for the compose stack (DB host, `DEBUG`, `ALLOWED_HOSTS`, MCP OAuth client) |
+| `jhe.env` | yes | `jhe`, `cron` | every Django setting the stack needs, including a public dev-only OIDC signing key |
 | `db.env` | yes | `db` | Postgres user/password/database |
 | `mcp.env` | yes | `mcp` | MCP server's JHE client credentials and broker key |
-| `local.secret.env` | **no** (gitignored) | `jhe`, `cron` | your real third-party credentials; optional |
+| `local.secret.env` | **no** (gitignored) | `jhe`, `cron` | your real third-party credentials; optional, overrides `jhe.env` |
 
-For `jhe` and `cron`, files load in the order above and later files win. Values that
-depend on the published ports (`SITE_URL`, `MCP_OAUTH_REDIRECT_URI`, the MCP server's
-JHE URLs) are set in `docker-compose.yml` itself and beat every file.
+Values that depend on the published ports (`SITE_URL`, `MCP_OAUTH_REDIRECT_URI`, the MCP
+server's JHE URLs) are set in `docker-compose.yml` itself and beat every file.
 
 Values that must agree across files:
 
 - `jhe.env` `MCP_OAUTH_CLIENT_ID` / `MCP_OAUTH_CLIENT_SECRET` = `mcp.env` `JHE_CLIENT_ID` / `JHE_CLIENT_SECRET`
-- `db.env` `POSTGRES_*` = the `DB_*` values Django sees (`ci/test_env.sh` + `jhe.env`)
+- `jhe.env` `DB_NAME` / `DB_USER` / `DB_PASSWORD` = `db.env` `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`
+
+The test suite doesn't use this directory. `scripts/dev/test.sh` loads `ci/test_env.sh`,
+the local mirror of CI's test environment, so local test runs match CI.
 
 ## Real credentials (`local.secret.env`)
 
