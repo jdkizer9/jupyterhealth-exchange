@@ -85,12 +85,12 @@ services:
     # No `build:` here: `jhe` builds jhe-dev:local and this service reuses it.
     image: jhe-dev:local
     pull_policy: never
-    entrypoint: ["sh", "/code/compose/jhe-entrypoint.sh"]
+    # No entrypoint: `jhe` migrates and seeds. Waiting for it to be healthy (below)
+    # means setup has finished before cron starts.
     command: ["supercronic", "/code/deploy/crontab"]
     env_file: *jhe-env-files
     environment:
       <<: *jhe-environment
-      JHE_SETUP: "0" # `jhe` migrates and seeds; don't race it
     volumes:
       - .:/code
     depends_on:
