@@ -34,7 +34,8 @@ x-jhe-environment: &jhe-environment
 services:
   db:
     image: postgres:16 # matches CI (.github/workflows/be_test.yml)
-    env_file: [compose/environment/db.env]
+    env_file:
+      - path: compose/environment/db.env
     volumes:
       - ./local/db:/var/lib/postgresql/data
     ports:
@@ -98,7 +99,8 @@ services:
   mcp:
     build: ./mcp_server
     image: jhe-mcp-dev:local
-    env_file: [compose/environment/mcp.env]
+    env_file:
+      - path: compose/environment/mcp.env
     environment:
       # Server-to-server calls go over the compose network...
       JHE_BASE_URL: http://jhe:${JHE_PORT:-8000}
