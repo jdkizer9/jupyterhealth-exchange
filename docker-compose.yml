@@ -51,9 +51,10 @@ services:
   jhe:
     build: .
     image: jhe-dev:local
+    pull_policy: never # local-only image: build it, never look for it in a registry
     # Dev-only entrypoint: migrate, then seed if the database is empty.
     entrypoint: ["sh", "/code/compose/jhe-entrypoint.sh"]
-    command: ["sh", "-c", "exec python manage.py runserver 0.0.0.0:${JHE_PORT:-8000}"]
+    command: ["python", "manage.py", "runserver", "0.0.0.0:${JHE_PORT:-8000}"]
     env_file: *jhe-env-files
     environment:
       <<: *jhe-environment
@@ -81,8 +82,9 @@ services:
   cron:
     # Same image and code as `jhe`; runs ow_poll every 15 min like Fly's cron process.
     # ow_poll exits immediately unless the `module.ow` setting is on.
-    build: .
+    # No `build:` here: `jhe` builds jhe-dev:local and this service reuses it.
     image: jhe-dev:local
+    pull_policy: never
     entrypoint: ["sh", "/code/compose/jhe-entrypoint.sh"]
     command: ["supercronic", "/code/deploy/crontab"]
     env_file: *jhe-env-files
@@ -99,6 +101,7 @@ services:
   mcp:
     build: ./mcp_server
     image: jhe-mcp-dev:local
+    pull_policy: never # local-only image: build it, never look for it in a registry
     env_file:
       - path: compose/environment/mcp.env
     environment:
