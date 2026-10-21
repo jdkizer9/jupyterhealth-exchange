@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Run the backend test suite against a disposable, RAM-backed Postgres
-# (docker-compose.test.yml). Your dev stack and its data are never touched.
+# Run the backend test suite in a container (docker-compose.test.yml), against a
+# disposable, RAM-backed Postgres. Needs only Docker; your dev stack and its data are
+# never touched.
 #
 #   scripts/dev/test.sh                                  all of tests/backend/
 #   scripts/dev/test.sh tests/backend/test_study_viewset.py -k scope
 #   scripts/dev/test.sh --fresh                          recreate the test DB first
 #
-# The test DB container stays up between runs and pytest reuses the database, so warm
-# runs skip migrations. Use --fresh after switching branches or changing migrations.
-# Any other arguments go straight to pytest.
+# The test DB stays up between runs and pytest reuses the database, so warm runs skip
+# migrations. Use --fresh after switching branches or changing migrations. Any other
+# arguments go straight to pytest.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -33,15 +34,15 @@ compose=(docker compose -f docker-compose.test.yml)
 if [ "$fresh" = 1 ]; then
     "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
 fi
+# Rebuilds only when pyproject.toml / uv.lock change; otherwise it's a cache hit.
+"${compose[@]}" build --quiet test-runner
 "${compose[@]}" up -d --wait test-db >/dev/null
-
-# Same environment CI uses, pointed at the test container.
-# shellcheck disable=SC1091
-source ci/test_env.sh
-export DB_HOST=127.0.0.1
-export DB_PORT="${JHE_TEST_DB_PORT:-5433}"
 
 db_args=(--reuse-db)
 [ "$fresh" = 1 ] && db_args+=(--create-db)
 
-exec uv run pytest "${db_args[@]}" "${args[@]}"
+# No TTY when output is piped (scripts, logs).
+if [ -t 0 ] && [ -t 1 ]; then tty=(); else tty=(-T); fi
+
+exec "${compose[@]}" run --rm ${tty[@]+"${tty[@]}"} test-runner \
+    python -m pytest "${db_args[@]}" "${args[@]}"

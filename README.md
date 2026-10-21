@@ -73,8 +73,10 @@ Helper scripts:
 | `scripts/dev/manage.sh <command>` | run a `manage.py` command in the `jhe` container |
 | `scripts/dev/shell.sh` | Django shell in the `jhe` container |
 | `scripts/dev/reset.sh` | wipe `./local/db` and start over with freshly seeded data |
-| `scripts/dev/test.sh [--fresh] [pytest args]` | backend tests against a disposable in-memory Postgres (needs [uv](https://docs.astral.sh/uv/)) |
-| `scripts/dev/check.sh [--quick]` | lint, format, missing-migration check and tests; what CI and pre-commit.ci will check |
+| `scripts/dev/test.sh [--fresh] [pytest args]` | backend tests in a container, against a disposable in-memory Postgres |
+| `scripts/dev/check.sh [--quick]` | lint, format, missing-migration check, backend and frontend tests, all in containers; what CI and pre-commit.ci will check |
+
+The test and check scripts use their own compose project (`docker-compose.test.yml`), so they never touch your dev data, and need nothing installed but Docker.
 | `scripts/dev/bruno-token.sh` | API token for the [Bruno](https://www.usebruno.com/) collection in `opencollection/JHE/`, or for curl |
 
 ## Getting Started (without Docker)
