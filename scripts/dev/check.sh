@@ -31,7 +31,9 @@ run() {
     fi
 }
 
-"${compose[@]}" build --quiet test-runner || exit 1
+# shellcheck source=scripts/dev/lib.sh
+source scripts/dev/lib.sh
+ensure_test_image || exit 1
 "${compose[@]}" up -d --wait test-db >/dev/null || exit 1
 
 # The ruff version pinned for pre-commit, so local checks match pre-commit.ci.

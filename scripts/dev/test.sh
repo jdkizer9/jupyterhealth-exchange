@@ -30,12 +30,14 @@ done
 # mcp_server/ and tests/contract/, which need their own environments.
 [ "$has_path" = 1 ] || args+=(tests/backend/)
 
+# shellcheck source=scripts/dev/lib.sh
+source scripts/dev/lib.sh
+
 compose=(docker compose -f docker-compose.test.yml)
 if [ "$fresh" = 1 ]; then
     "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
 fi
-# Rebuilds only when pyproject.toml / uv.lock change; otherwise it's a cache hit.
-"${compose[@]}" build --quiet test-runner
+ensure_test_image
 "${compose[@]}" up -d --wait test-db >/dev/null
 
 db_args=(--reuse-db)

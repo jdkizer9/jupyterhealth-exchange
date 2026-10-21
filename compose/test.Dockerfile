@@ -1,31 +1,25 @@
-# Test-runner image for docker-compose.test.yml: the app's locked dependencies plus the
-# dev group (pytest, pytest-django, coverage...). Dev-only; production uses ../Dockerfile.
+# Test-runner image for docker-compose.test.yml: the app image plus uv and the dev
+# dependency group (pytest, pytest-django, coverage...). Dev-only.
 #
-# Keep the Python version and system packages in step with ../Dockerfile, which installs
-# with --no-dev and so can't run the tests itself.
-ARG PYTHON_VERSION=3.11-slim-trixie
+# Built on jhe-dev:local, the image docker-compose.yml builds from ../Dockerfile, so the
+# Python version, system packages and runtime dependencies are inherited rather than
+# repeated here. The code baked into that image is ignored: tests run against the repo,
+# bind-mounted at /code.
+#
+# scripts/dev/test.sh and check.sh rebuild this image (and its base) only when
+# ../Dockerfile, this file, pyproject.toml or uv.lock change, recorded in the label below.
+ARG BASE_IMAGE=jhe-dev:local
+FROM ${BASE_IMAGE}
 
-FROM python:${PYTHON_VERSION}
-
-RUN apt-get -y update \
- && apt-get -y install --no-install-recommends postgresql-client git \
- && rm -rf /var/lib/apt/lists/*
-
-# Same uv as ../Dockerfile. uvx is used by scripts/dev/check.sh to run ruff.
+# uv to install the dev group the same way ../Dockerfile installs the rest (into the system
+# interpreter); uvx so check.sh can run ruff at pre-commit's version.
 COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /usr/local/bin/
 
-# The repo is bind-mounted at /code, so a venv at /code/.venv would be hidden (or swapped
-# for your host's). UV_PROJECT_ENVIRONMENT keeps the container's venv outside the mount.
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/opt/venv \
-    PATH=/opt/venv/bin:$PATH
-
-WORKDIR /code
-
-# Only the lock files: the code comes from the bind mount at run time, so this layer
-# rebuilds only when dependencies change.
-COPY pyproject.toml uv.lock /code/
+# pyproject.toml and uv.lock are already in the base image at /code.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
+    uv export --frozen --only-group dev --no-emit-project --format requirements.txt -o /tmp/dev-requirements.txt \
+ && uv pip install --system --no-deps -r /tmp/dev-requirements.txt
+
+# Last, so a fingerprint change alone doesn't invalidate the install layer above.
+ARG DEPS_FINGERPRINT=unknown
+LABEL org.jupyterhealth.jhe.test-deps-fingerprint=${DEPS_FINGERPRINT}

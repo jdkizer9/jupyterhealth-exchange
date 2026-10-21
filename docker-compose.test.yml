@@ -26,11 +26,14 @@ services:
       timeout: 5s
       retries: 30
 
-  # Backend tests, the migrations check and ruff. Image = locked deps + dev group.
+  # Backend tests, the migrations check and ruff. Image = the app image (jhe-dev:local)
+  # plus the dev dependency group; scripts/dev/test.sh builds both when needed.
   test-runner:
     build:
-      context: .
-      dockerfile: compose/test.Dockerfile
+      # The Dockerfile copies nothing from its context, so keep the context tiny instead
+      # of sending the whole repo.
+      context: compose
+      dockerfile: test.Dockerfile
     image: jhe-test-runner:local
     pull_policy: never # local-only image: build it, never look for it in a registry
     env_file:
