@@ -13,6 +13,9 @@ from django.db.models import Q
 from django.utils import timezone
 
 from patient_access.core import models as m
+from patient_access.core.interfaces import AuthAttemptStore, Directory, JobStore
+from patient_access.dispatch.db_polling import JobClaimer
+from patient_access.identity.jwt_deeplink import DeepLinkStore
 
 from .crypto import decrypt_secrets, decrypt_str, encrypt_secrets, encrypt_str
 from .models import (
@@ -62,7 +65,7 @@ def _location(loc: EhrBrandLocation) -> m.Location:
     )
 
 
-class OrmDirectory:
+class OrmDirectory(Directory):
     def search(self, q: str, state: str | None = None, postal: str | None = None, limit: int = 25) -> list[m.Location]:
         qs = EhrBrandLocation.objects.select_related("brand", "brand__vendor")
         for word in (q or "").split():
@@ -89,7 +92,7 @@ class OrmDirectory:
 # --- identity plug storage --------------------------------------------------------------------
 
 
-class OrmDeepLinkStore:
+class OrmDeepLinkStore(DeepLinkStore):
     def is_consumed(self, jti: str) -> bool:
         return ConsumedDeepLink.objects.filter(jti=jti).exists()
 
@@ -108,7 +111,7 @@ class OrmDeepLinkStore:
 # --- phase 3 ----------------------------------------------------------------------------------
 
 
-class OrmAuthAttemptStore:
+class OrmAuthAttemptStore(AuthAttemptStore):
     def create(self, a: m.AuthAttempt) -> str:
         AuthAttemptRecord.objects.create(
             state=a.state,
@@ -216,7 +219,7 @@ def job_from_record(r: JobRecord) -> m.Job:
     )
 
 
-class OrmJobStore:
+class OrmJobStore(JobStore):
     def create(self, job: m.Job) -> m.JobId:
         r = _apply(job, JobRecord(id=job.id) if job.id else JobRecord())
         r.save(force_insert=True)
@@ -235,7 +238,7 @@ class OrmJobStore:
         _apply(job, r).save(update_fields=_SAVED_FIELDS)
 
 
-class OrmJobClaimer:
+class OrmJobClaimer(JobClaimer):
     """DbPollingDispatcher's claimer: SELECT ... FOR UPDATE SKIP LOCKED over the job rows."""
 
     RETRY_AFTER = timedelta(seconds=30)
@@ -276,8 +279,9 @@ class OrmJobClaimer:
         JobRecord.objects.filter(id=job_id, lease_owner=worker_id).update(lease_owner=None, lease_expires_at=None)
 
     def live_spool_refs(self) -> set[str]:
-        return set(
+        refs = (
             JobRecord.objects.exclude(status__in=["done", "failed_terminal"])
             .exclude(spool_ref__isnull=True)
             .values_list("spool_ref", flat=True)
         )
+        return {r for r in refs if r}

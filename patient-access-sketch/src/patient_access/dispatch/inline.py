@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from patient_access.core.interfaces import JobDispatcher
 from patient_access.core.models import JobId
 
 
-class InlineDispatcher:
+class InlineDispatcher(JobDispatcher):
     def __init__(self, run: Callable[[JobId], Any]):
         self.run = run
 

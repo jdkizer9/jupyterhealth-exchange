@@ -9,16 +9,18 @@ metadata object is written last and is the "complete" marker.
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import boto3
 from botocore.config import Config
 
+from patient_access.core.interfaces import Sink, SinkSession, SpoolHandle
 from patient_access.core.models import Job, Receipt, Unit, UnitOutcome
 
 from .local_dir import safe
 
 
-class S3Sink:
+class S3Sink(Sink):
     accepts = frozenset({"document", "batch", "collection", "metadata"})
 
     def __init__(
@@ -61,7 +63,7 @@ class S3Sink:
         return S3Session(self, f"{self.prefix}/{safe(job.participant.ref)}/{safe(job.id)}")
 
 
-class S3Session:
+class S3Session(SinkSession):
     def __init__(self, sink: S3Sink, prefix: str):
         self.sink = sink
         self.prefix = prefix
@@ -69,7 +71,7 @@ class S3Session:
         self.units = self.resources = self.blobs = self.bytes = 0
 
     def _put(self, rel: str, data: bytes, content_type: str) -> None:
-        extra = {}
+        extra: dict[str, Any] = {}
         if self.sink.sse:
             extra["ServerSideEncryption"] = self.sink.sse
             if self.sink.kms_key_id:
@@ -79,7 +81,7 @@ class S3Session:
         self.keys.append(key)
         self.bytes += len(data)
 
-    def write(self, unit: Unit, spool) -> UnitOutcome:
+    def write(self, unit: Unit, spool: SpoolHandle) -> UnitOutcome:
         for blob in unit.blobs:
             self._put(blob.key, spool.get_blob(blob.blob_id), blob.meta.content_type)
             self.blobs += 1

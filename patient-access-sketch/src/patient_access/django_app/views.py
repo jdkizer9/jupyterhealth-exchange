@@ -48,8 +48,8 @@ def _error(request: HttpRequest, message: str, status: int = 400) -> HttpRespons
 
 def _inbound(request: HttpRequest) -> InboundRequest:
     return InboundRequest(
-        query={k: v for k, v in request.GET.items()},
-        headers={k.lower(): v for k, v in request.headers.items()},
+        query={k: str(v) for k, v in request.GET.items()},
+        headers={k.lower(): str(v) for k, v in request.headers.items()},
     )
 
 

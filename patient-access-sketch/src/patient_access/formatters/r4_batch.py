@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from patient_access.core.interfaces import SpoolHandle
+from patient_access.core.interfaces import Formatter, SpoolHandle
 from patient_access.core.models import Job, Unit
 
 
-class R4BatchFormatter:
+class R4BatchFormatter(Formatter):
     produces = frozenset({"batch"})
 
     def __init__(self, chunk: int = 100, skip_types: list[str] | None = None):

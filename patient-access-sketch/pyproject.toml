@@ -17,7 +17,15 @@ dependencies = [
 django = ["django==5.2.17", "psycopg[binary]>=3.2"]
 s3 = ["boto3>=1.35"]
 dramatiq = ["dramatiq[redis]==2.2.1"]
-dev = ["pytest>=8", "pytest-django>=4.9", "import-linter>=2.1"]
+dev = [
+    "pytest>=8",
+    "pytest-django>=4.9",
+    "import-linter>=2.1",
+    "mypy>=1.18",
+    "django-stubs>=5.2",
+    "boto3-stubs[s3]>=1.35",
+    "types-requests>=2.32",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -31,6 +39,17 @@ testpaths = ["tests"]
 DJANGO_SETTINGS_MODULE = "server.settings"
 # Core tests must not need a database; Django tests opt in with the `django_db` mark.
 addopts = "-q"
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+mypy_path = "src"
+packages = ["patient_access", "server"]
+ignore_missing_imports = true # dramatiq ships no stubs
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.django-stubs]
+django_settings_module = "server.settings"
 
 [tool.ruff]
 line-length = 120

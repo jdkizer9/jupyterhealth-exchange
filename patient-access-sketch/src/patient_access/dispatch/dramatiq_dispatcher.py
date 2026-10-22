@@ -17,6 +17,7 @@ from typing import Any
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
+from patient_access.core.interfaces import JobDispatcher
 from patient_access.core.models import JobId
 
 log = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def run_job_actor(job_id: str) -> None:
     _runner(job_id)
 
 
-class DramatiqDispatcher:
+class DramatiqDispatcher(JobDispatcher):
     def __init__(self):
         self.actor = run_job_actor
 

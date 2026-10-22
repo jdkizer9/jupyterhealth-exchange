@@ -128,6 +128,8 @@ def client_assertion(vendor: VendorConfig, token_endpoint: str, now: int | None 
         "iat": now,
         "exp": now + ASSERTION_TTL_SECONDS,  # it sends 3600
     }
+    if not vendor.private_key_pem:
+        raise SmartError(f"vendor {vendor.name} has no private key for private_key_jwt")
     headers = {"kid": vendor.key_id} if vendor.key_id else None
     return jwt.encode(claims, vendor.private_key_pem, algorithm=vendor.jwt_alg, headers=headers)
 

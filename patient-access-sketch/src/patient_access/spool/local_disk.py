@@ -20,9 +20,11 @@ from collections.abc import Iterator
 from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
+from typing import BinaryIO
 
 from cryptography.fernet import Fernet
 
+from patient_access.core.interfaces import Spool, SpoolHandle
 from patient_access.core.models import BlobMeta, Job, SpoolIndex
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -32,13 +34,13 @@ def _safe(name: str) -> str:
     return _SAFE.sub("_", name)[:200]
 
 
-class LocalDiskSpoolHandle:
+class LocalDiskSpoolHandle(SpoolHandle):
     def __init__(self, ref: str, path: Path, fernet: Fernet):
         self.ref = ref
         self.path = path
         self._f = fernet
         (path / "blobs").mkdir(parents=True, exist_ok=True)
-        self._files: dict[str, object] = {}
+        self._files: dict[str, BinaryIO] = {}
         self._blob_meta: dict[str, BlobMeta] = self._load_blob_meta()
 
     # --- resources
@@ -117,7 +119,7 @@ class LocalDiskSpoolHandle:
         self._files.clear()
 
 
-class LocalDiskSpool:
+class LocalDiskSpool(Spool):
     def __init__(self, root: str):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)

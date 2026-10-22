@@ -18,14 +18,14 @@ from urllib.parse import unquote
 import requests
 
 from patient_access.core.http import session as http_session
-from patient_access.core.interfaces import IdentityError
+from patient_access.core.interfaces import IdentityError, IdentityProvider
 from patient_access.core.models import InboundRequest, Participant, Secrets
 
 JHE_TOKEN = "jhe_access_token"
 _CODE = re.compile(r"^(?P<host>[^_]+)_(?P<token>[A-Za-z0-9]{32})$")
 
 
-class JheInvitationIdentity:
+class JheInvitationIdentity(IdentityProvider):
     name = "jhe_invitation"
 
     def __init__(self, base_url: str, public_host: str, timeout: float = 20, http: requests.Session | None = None):

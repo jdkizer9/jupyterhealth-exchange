@@ -96,6 +96,8 @@ def _pull(
     seen: set[str],
     save: Callable[[], None],
 ) -> None:
+    url: str | None
+    params: dict | None
     url, params = _search_url(client.base, spec, patient, client.vendor.page_size)
     started = time.monotonic()
     while url:

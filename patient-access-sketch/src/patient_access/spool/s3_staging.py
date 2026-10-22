@@ -18,12 +18,14 @@ import re
 from collections.abc import Iterator
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from cryptography.fernet import Fernet
 
+from patient_access.core.interfaces import Spool, SpoolHandle
 from patient_access.core.models import BlobMeta, Job, SpoolIndex
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -33,7 +35,7 @@ def _safe(name: str) -> str:
     return _SAFE.sub("_", name)[:200]
 
 
-class S3StagingSpoolHandle:
+class S3StagingSpoolHandle(SpoolHandle):
     def __init__(self, spool: S3StagingSpool, ref: str, fernet: Fernet):
         self.spool, self.ref, self._f = spool, ref, fernet
         self.root = f"{spool.prefix}/{ref}"
@@ -129,7 +131,7 @@ class S3StagingSpoolHandle:
         self._flush()
 
 
-class S3StagingSpool:
+class S3StagingSpool(Spool):
     def __init__(
         self,
         bucket: str,
@@ -160,14 +162,14 @@ class S3StagingSpool:
 
     def ensure_lifecycle(self, days: int) -> None:
         """The backstop: the store itself expires anything left under the staging prefix."""
-        rule = {
+        rule: Any = {
             "ID": "expire-staging",
             "Status": "Enabled",
             "Filter": {"Prefix": f"{self.prefix}/"},
             "Expiration": {"Days": int(days)},
         }
         try:
-            rules = self.client.get_bucket_lifecycle_configuration(Bucket=self.bucket).get("Rules", [])
+            rules: list[Any] = list(self.client.get_bucket_lifecycle_configuration(Bucket=self.bucket).get("Rules", []))
         except ClientError:
             rules = []
         rules = [r for r in rules if r.get("ID") != "expire-staging"] + [rule]

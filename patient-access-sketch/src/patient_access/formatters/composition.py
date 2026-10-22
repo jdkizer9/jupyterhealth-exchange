@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
-from patient_access.core.interfaces import SpoolHandle
+from patient_access.core.interfaces import Formatter, SpoolHandle
 from patient_access.core.models import BlobRef, Job, Unit
 
 NS = uuid.UUID("6f1c7d0e-3b0a-4c5e-9a57-1d2c0b7e9a10")
@@ -65,7 +65,7 @@ def _rewrite_refs(node: Any, index: dict[str, str], iss: str) -> Any:
     return node
 
 
-class CompositionBundleFormatter:
+class CompositionBundleFormatter(Formatter):
     produces = frozenset({"document", "metadata"})
 
     def __init__(self, author_name: str = "Patient Access Module"):

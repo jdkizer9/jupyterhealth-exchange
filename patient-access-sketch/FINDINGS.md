@@ -29,9 +29,9 @@ the design; not a changelog.
    a FHIR Bundle); a `JobClaimer` Protocol with `claim(job_id)` for broker workers;
    `DeepLinkStore.is_consumed`; format and sink as one job status (`delivering`); query tables
    that extend each other; the sweep independent of the dispatcher.
-
-**Open with the JHE team:** JHE's import API accepted records for a patient who never consented
-in its UI (M6 finding 3).
+6. **Conformance is now explicit and checked.** Every implementation inherits the Protocol it
+   satisfies and `mypy` (with the Django and boto3 stubs) runs in `scripts/check.sh`. Before that,
+   nothing verified that a plug matched its Protocol beyond the tests that happened to call it.
 
 **Not covered:** Epic (M7), the `Binary` download path against a real server, C-CDA,
 `private_key_jwt` beyond the reference sandbox, a browser run of scenario B, production concerns.
@@ -274,29 +274,20 @@ that source. Same worker image and code as scenario A; the deployment config dif
    every pull. Fix options: mounted mode shares the tables (design §9.1's migration), or the JHE
    sink sends the brand and JHE resolves source by (patient, data source, iss) instead of brand.
    The 409 duplicate path itself was therefore not exercised end to end (unit-tested only).
-3. **JHE accepted records for a patient who never consented in JHE's UI.** The sketch bypasses
-   JHE's hub and consent screens (by design for the sketch), and neither `fhir_sources` nor
-   `/fhir-import/R4/` checked consent for the EHR Patient Portal data source. Possibly intended
-   (the token is the patient's own), but worth confirming with the JHE team: today consent is
-   enforced by the browser flow, not the API.
-4. **The JHE sink must read the JHE identity's secret.** `destinations/jhe.py` imports
+3. **The JHE sink must read the JHE identity's secret.** `destinations/jhe.py` imports
    `JHE_TOKEN` from `identity/jhe_invitation.py`. Identity and sink are coupled the same way
    formatter and sink are; a real build should make that pairing explicit (or name the secret in
    config) rather than share a constant.
-5. **Redemption happens on open, not on commit.** JHE spends the invitation when `resolve` calls
+4. **Redemption happens on open, not on commit.** JHE spends the invitation when `resolve` calls
    it; JHE's own 12-hour "recently redeemed" window is what makes reopening work. Different from
    the deep link's "spend at commit", and owned by JHE, not the module. Fine, but the two
    identity providers have different single-use semantics, which the receipt should say.
-6. **Compose networks collide on service names.** Joining `jhe_default` made `db` resolve to JHE's
+5. **Compose networks collide on service names.** Joining `jhe_default` made `db` resolve to JHE's
    Postgres (password failure). The sketch now addresses its own services by aliases (`pa-db`,
    `pa-s3`). Any host that runs the module beside JHE on one network has the same trap.
-7. **Revoking the JHE token at finish conflicts with retry.** If delivery fails after `finish`
+6. **Revoking the JHE token at finish conflicts with retry.** If delivery fails after `finish`
    revoked the token, a retry can't post. `abort` keeps it; `finish` only runs on success, so it
    is right today, but a partial-success-then-retry design would need a refreshable credential.
-
-Left in your local JHE database by M6 (all for seeded patient Peter, id 40001): the
-"Patient Access Sketch" client and its links, two FhirSources (90004, 90005) with 2,121 rows each,
-one PatientIdentifier. JHE's `scripts/dev/reset.sh` removes everything.
 
 ## M7: Epic sandbox (skipped, 2026-10-22)
 

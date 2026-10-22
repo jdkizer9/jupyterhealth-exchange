@@ -8,7 +8,18 @@ import uuid
 from collections.abc import Iterator
 from datetime import datetime, timedelta
 
-from patient_access.core.interfaces import IdentityError
+from patient_access.core.interfaces import (
+    AuthAttemptStore,
+    Directory,
+    Formatter,
+    IdentityError,
+    IdentityProvider,
+    JobStore,
+    Sink,
+    SinkSession,
+    Spool,
+    SpoolHandle,
+)
 from patient_access.core.models import (
     AuthAttempt,
     BlobMeta,
@@ -25,7 +36,7 @@ from patient_access.core.models import (
 )
 
 
-class StaticIdentity:
+class StaticIdentity(IdentityProvider):
     """Resolves every request to the same participant (or to `?ref=`)."""
 
     name = "static"
@@ -44,7 +55,7 @@ class StaticIdentity:
         self.committed.append(participant.ref)
 
 
-class InMemoryDirectory:
+class InMemoryDirectory(Directory):
     def __init__(self, locations: list[Location] | None = None):
         self.locations = {loc.id: loc for loc in locations or []}
 
@@ -66,7 +77,7 @@ class InMemoryDirectory:
         raise NotImplementedError("the in-memory directory is seeded directly")
 
 
-class InMemoryAuthAttemptStore:
+class InMemoryAuthAttemptStore(AuthAttemptStore):
     def __init__(self, clock=None):
         self.attempts: dict[str, AuthAttempt] = {}
         self.clock = clock
@@ -84,7 +95,7 @@ class InMemoryAuthAttemptStore:
         return copy.deepcopy(attempt)
 
 
-class InMemoryJobStore:
+class InMemoryJobStore(JobStore):
     """Deep-copies on the way in and out, so tests catch code that forgets to save."""
 
     def __init__(self):
@@ -105,7 +116,7 @@ class InMemoryJobStore:
         self.jobs[job.id] = copy.deepcopy(job)
 
 
-class InMemorySpoolHandle:
+class InMemorySpoolHandle(SpoolHandle):
     def __init__(self, ref: str, store: dict):
         self.ref = ref
         self._s = store
@@ -147,7 +158,7 @@ class InMemorySpoolHandle:
         pass
 
 
-class InMemorySpool:
+class InMemorySpool(Spool):
     def __init__(self):
         self.spools: dict[str, dict] = {}
         self.deleted: list[str] = []
@@ -169,7 +180,7 @@ class InMemorySpool:
         return gone
 
 
-class PassthroughFormatter:
+class PassthroughFormatter(Formatter):
     """One `collection` Bundle per resource type, resources as fetched."""
 
     produces = frozenset({"collection"})
@@ -185,7 +196,7 @@ class PassthroughFormatter:
             )
 
 
-class MemorySink:
+class MemorySink(Sink):
     accepts = frozenset({"collection", "batch", "document", "metadata"})
 
     def __init__(self, fail_on: str | None = None):
@@ -196,11 +207,11 @@ class MemorySink:
     def begin(self, job: Job):
         sink = self
 
-        class Session:
+        class Session(SinkSession):
             def __init__(self):
                 self.units: list[Unit] = []
 
-            def write(self, unit: Unit, spool) -> UnitOutcome:
+            def write(self, unit: Unit, spool: SpoolHandle) -> UnitOutcome:
                 if sink.fail_on and unit.name == sink.fail_on:
                     raise RuntimeError(f"configured to fail on {unit.name}")
                 self.units.append(unit)

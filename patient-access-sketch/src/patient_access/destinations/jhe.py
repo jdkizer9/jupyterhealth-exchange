@@ -12,6 +12,7 @@ from __future__ import annotations
 import requests
 
 from patient_access.core.http import session as http_session
+from patient_access.core.interfaces import Sink, SinkSession, SpoolHandle
 from patient_access.core.models import Job, Receipt, Unit, UnitOutcome
 from patient_access.identity.jhe_invitation import JHE_TOKEN
 
@@ -29,7 +30,7 @@ def _issues(entry: dict, severities: tuple[str, ...]) -> list[str]:
     ]
 
 
-class JheHttpSink:
+class JheHttpSink(Sink):
     accepts = frozenset({"batch"})
 
     def __init__(self, base_url: str, data_source_id: int | str, timeout: float = 120):
@@ -44,7 +45,7 @@ class JheHttpSink:
         return JheSession(self, job, token)
 
 
-class JheSession:
+class JheSession(SinkSession):
     def __init__(self, sink: JheHttpSink, job: Job, token: str):
         self.sink, self.job, self.token = sink, job, token
         self.http = http_session()
@@ -69,7 +70,7 @@ class JheSession:
         self.source_id = r.json()["id"]
         self.source_created = r.status_code == 201
 
-    def write(self, unit: Unit, spool) -> UnitOutcome:
+    def write(self, unit: Unit, spool: SpoolHandle) -> UnitOutcome:
         out = UnitOutcome()
         try:
             r = self.http.post(

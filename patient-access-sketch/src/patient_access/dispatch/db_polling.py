@@ -15,7 +15,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, Protocol
 
-from patient_access.core.interfaces import Spool
+from patient_access.core.interfaces import JobDispatcher, Spool
 from patient_access.core.models import JobId
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class JobClaimer(Protocol):
         ...
 
 
-class DbPollingDispatcher:
+class DbPollingDispatcher(JobDispatcher):
     def __init__(
         self,
         interval_seconds: float = 2.0,

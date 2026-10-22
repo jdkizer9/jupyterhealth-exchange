@@ -18,7 +18,7 @@ from urllib.parse import urlencode
 
 import jwt
 
-from patient_access.core.interfaces import IdentityError
+from patient_access.core.interfaces import IdentityError, IdentityProvider
 from patient_access.core.models import InboundRequest, Participant
 
 ALGORITHMS = ["ES256"]
@@ -37,7 +37,7 @@ class DeepLinkStore(Protocol):
         ...
 
 
-class InMemoryDeepLinkStore:
+class InMemoryDeepLinkStore(DeepLinkStore):
     def __init__(self):
         self.used: dict[str, tuple[str, datetime]] = {}
 
@@ -55,7 +55,7 @@ def _read(path_or_pem: str) -> str:
     return path_or_pem if path_or_pem.lstrip().startswith("-----BEGIN") else Path(path_or_pem).read_text()
 
 
-class JwtDeepLinkIdentity:
+class JwtDeepLinkIdentity(IdentityProvider):
     name = "jwt_deeplink"
 
     def __init__(
@@ -83,7 +83,7 @@ class JwtDeepLinkIdentity:
         try:
             unverified = jwt.decode(token, options={"verify_signature": False})
             iss = unverified.get("iss")
-            key = self.keys.get(iss)
+            key = self.keys.get(iss) if isinstance(iss, str) else None
             if key is None:
                 raise IdentityError("This link was not issued by a recognized study.")
             claims = jwt.decode(

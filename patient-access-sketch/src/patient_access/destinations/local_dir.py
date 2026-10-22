@@ -12,6 +12,7 @@ import re
 import shutil
 from pathlib import Path
 
+from patient_access.core.interfaces import Sink, SinkSession, SpoolHandle
 from patient_access.core.models import Job, Receipt, Unit, UnitOutcome
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]")
@@ -21,7 +22,7 @@ def safe(part: str) -> str:
     return _SAFE.sub("_", part)[:128] or "_"
 
 
-class LocalDirectorySink:
+class LocalDirectorySink(Sink):
     accepts = frozenset({"document", "batch", "collection", "metadata"})
 
     def __init__(self, root: str):
@@ -31,7 +32,7 @@ class LocalDirectorySink:
         return LocalDirectorySession(self.root / "pulls" / safe(job.participant.ref) / safe(job.id), job)
 
 
-class LocalDirectorySession:
+class LocalDirectorySession(SinkSession):
     def __init__(self, path: Path, job: Job):
         self.path = path
         self.job = job
@@ -48,7 +49,7 @@ class LocalDirectorySession:
         tmp.rename(target)
         self.bytes += len(data)
 
-    def write(self, unit: Unit, spool) -> UnitOutcome:
+    def write(self, unit: Unit, spool: SpoolHandle) -> UnitOutcome:
         for blob in unit.blobs:
             self._put(blob.key, spool.get_blob(blob.blob_id))
             self.blobs += 1

@@ -58,6 +58,11 @@ def build(spec: dict, services: dict[str, Any]) -> Any:
     return cls(**options)
 
 
+class _Unset(JobDispatcher):
+    def dispatch(self, job_id: str) -> None:
+        raise RuntimeError("dispatcher not wired")
+
+
 @dataclass
 class Module:
     """Everything a host needs, built once per process."""
@@ -124,7 +129,7 @@ def get_module() -> Module:
         spool=spool,
         destinations=destinations,
         default_destination=_subst(config["default_destination"]),
-        dispatcher=None,  # type: ignore[arg-type] - set below; InlineDispatcher needs the module's run
+        dispatcher=_Unset(),  # replaced below: InlineDispatcher needs the module's `run`, which needs the module
         vendors=vendors,
         deps=deps,
         claimer=OrmJobClaimer(max_attempts=max_attempts),
