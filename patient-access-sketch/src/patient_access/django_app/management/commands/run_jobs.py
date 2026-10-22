@@ -1,6 +1,7 @@
 """Worker side of the DbPollingDispatcher. Standalone: a long-running service. JHE: `--once` from cron."""
 
 import signal
+import threading
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -41,6 +42,7 @@ class Command(BaseCommand):
         def stop(*_):
             stopping["flag"] = True
 
-        signal.signal(signal.SIGTERM, stop)
-        signal.signal(signal.SIGINT, stop)
+        if threading.current_thread() is threading.main_thread():  # under the dev reloader it is not
+            signal.signal(signal.SIGTERM, stop)
+            signal.signal(signal.SIGINT, stop)
         poll_forever(dispatcher, module.claimer, module.run, module.spool, should_stop=lambda: stopping["flag"])

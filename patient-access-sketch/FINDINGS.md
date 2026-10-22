@@ -107,3 +107,39 @@ fhir-client.js's discovery, PKCE and token exchange plus four sessionStorage key
    code change, only which brand the patient picked. `VendorConfig` carrying the method is right.
 5. **Dev ergonomics:** the worker caches the module, so it needs autoreload like runserver (added
    with Django's reloader under DEBUG). Config file edits still need a restart of both services.
+
+## M3: fetch to spool (2026-10-22)
+
+Built: `core/puller.py` (query table walk grouped by resource type, paging via `next` links, page
+cap, dedupe across rows of the same type, per-type error isolation, 401 aborts, token-expiry
+margin, resume per type), the worker running real jobs through `DbPollingDispatcher`, and the
+status page polling `/api/jobs/{id}`. Delivery still goes to `MemorySink` until M4.
+
+Measured on the hosted sandbox, patient `12edb5a0…` (the largest found):
+
+| | |
+|---|---|
+| resources | 2,121 (Labs 1,288, Vital Signs 325, Encounters 243, Diagnostic Reports 158) |
+| requests | 56 (sandbox page size 50; Labs alone 26 pages) |
+| fetch time | 11.3 s, of a 3,600 s token |
+| spool, encrypted | 2.76 MB, about 1.3 KB per resource including Fernet's base64 overhead |
+
+So the token budget is not close to binding for resources, even at 10× this patient; documents
+(M5) are what could. The browser-driven job (164 resources) took 3.3 s.
+
+1. **The spool is per resource type, so resume is per type, not per query table row.** Labs and
+   Vital Signs both write `Observation`; re-running only the unfinished row would duplicate or
+   lose the other row's data. Grouping by type and redoing the whole type on resume is simple and
+   correct. The design's "fetch is idempotent per type" was right, more literally than intended.
+2. **What to do when the token expires mid-fetch was undecided.** The sketch delivers what it has
+   and marks the remaining types `error: authorization expired`, rather than failing the whole
+   job. A partial pull with an honest receipt seems better for the patient than nothing; a real
+   build should confirm with the consumers.
+3. **Dedupe across rows needs only an in-memory id set per type**, as the browser did. No spool
+   lookup needed, because each type is fetched in one pass.
+4. **OperationOutcome entries inside search bundles are dropped silently** today (filtered by
+   `resourceType`). They can carry useful warnings ("some results suppressed"); worth tallying
+   into the outcome in a real build.
+5. **Ops wrinkles:** `docker compose restart` does not pick up a changed `environment:` (the
+   worker kept failing to load config until recreated with `up -d`); Django's reloader runs the
+   command in a thread, where `signal.signal` is not allowed.

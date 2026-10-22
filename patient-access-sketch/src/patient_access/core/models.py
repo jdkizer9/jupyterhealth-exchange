@@ -173,6 +173,7 @@ class TypeOutcome:
     bytes: int = 0
     error: str | None = None
     capped: bool = False
+    seconds: float = 0.0
 
 
 @dataclass
