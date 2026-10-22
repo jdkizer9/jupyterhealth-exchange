@@ -1,0 +1,10 @@
+{% extends "patient_access/base.html" %}
+{% block content %}
+<h1>Connect to {{ location.brand_name }}</h1>
+<p class="muted">You'll sign in to {{ location.name }}'s patient portal and approve sharing your records.</p>
+<form method="post" action="{% url 'patient_access:launch' %}">
+  {% csrf_token %}<input type="hidden" name="location_id" value="{{ location.id }}">
+  <button type="submit" id="connect">Continue</button>
+</form>
+<p class="muted"><a href="{% url 'patient_access:pick' %}">Not your health system?</a></p>
+{% endblock %}

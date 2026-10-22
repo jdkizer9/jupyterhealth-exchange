@@ -38,3 +38,36 @@ What the code said about the design:
    `patient_access.django` (§9.1). A subpackage named `django` invites import confusion.
 7. **Tooling:** import-linter refuses contracts that name modules that don't exist yet, so the
    "boto3 only in S3 modules" contract grows as modules land.
+
+## M1: identity, directory, picker (2026-10-22)
+
+Built: `JwtDeepLinkIdentity` (ES256, issuer-keyed public keys, consumed at `commit`) with
+`mint_deeplink`; the directory tables and JHE's Brands Bundle importer (copied, vendor made a
+parameter); `seed_directory`, which loads JHE's Epic sample bundle and four SMART sandbox
+"brands" whose iss encodes the launch options; `/start`, `/pick`, `/api/brands`, a confirm page
+when the link names a brand. Demo (Playwright): minted link → picker → search "sandbox" → Connect
+→ selection page showing participant `P-00123`. 18 tests pass.
+
+Copied from elsewhere: the Brands Bundle importer and the sample bundle (JHE), the query table
+(JHE's `EHR_PATIENT_PORTAL_PULLS`, as config data), `SandboxConfig` (jupyter-smart-on-fhir).
+
+1. **`DeepLinkStore` needs two methods, not one.** `resolve` must refuse a spent link before the
+   patient goes through EHR login, so the store has `is_consumed` (read, on open) as well as
+   `consume` (unique insert, on commit). The plug-owns-its-storage pattern held up otherwise: the
+   model is in the Django app, the Protocol and an in-memory version are in `identity/`, and core
+   never sees either.
+2. **`Participant.handle` and `attrs` carry what `commit` needs** (`jti`, link expiry). A
+   provider-private field on a core dataclass is a small leak; the alternative is `commit`
+   re-parsing the request, which it doesn't have at callback time. Keep the field, document it.
+3. **A SMART sandbox "brand" is just an iss.** The hosted launcher reads its whole configuration
+   (client type, PKCE, secret, JWKS, preselected patient, skip-login) from a base64url segment in
+   the URL, so each auth mode is a directory row and a vendor entry. Cheap and realistic: the
+   directory, not a test flag, selects the client auth method, which is how production will work.
+   The vendored harness encoded standard base64; the launcher decodes base64url (fixed).
+4. **The hosted sandbox is thin on documents.** Of 651 patients, exactly one `DocumentReference`
+   exists (inline `text/plain`), there are no `Binary` resources and no `DiagnosticReport.presentedForm`
+   in the first 200 reports. M5 can exercise inline attachments only; the Binary path needs Epic
+   or a synthetic fixture. Patient `12edb5a0…` (≈1,700 Observations) is the scale test.
+5. **fhir-client's `explicitPatient` quirk doesn't apply server-side.** The JS table needed it
+   because `patient.request` could not scope Device; the Python puller adds `patient=` to every
+   search itself, so the flag is now meaningless. Ported as data, but that row's quirk is moot.

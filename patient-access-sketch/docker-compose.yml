@@ -33,6 +33,9 @@ x-pa-environment: &pa-environment
   PA_CONFIG: /code/compose/dev-config.json
   PA_SPOOL_DIR: /code/local/spool
   PA_OUT_DIR: /code/local/out
+  # The sandbox accepts whatever secret the launch options carry; this one is baked into the
+  # "confidential symmetric" sandbox brand's iss by seed_directory.
+  PA_SMART_SANDBOX_CLIENT_SECRET: dev-only-sandbox-client-secret
 
 services:
   db:
@@ -57,7 +60,7 @@ services:
     build: .
     image: patient-access-sketch:local
     pull_policy: never
-    command: ["sh", "-c", "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8080"]
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py seed_directory && exec python manage.py runserver 0.0.0.0:8080"]
     environment:
       <<: *pa-environment
     ports:
