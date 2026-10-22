@@ -23,3 +23,6 @@ services:
     environment:
       PA_CONFIG: /code/compose/dev-config-dramatiq.json
       PA_DRAMATIQ_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
