@@ -84,7 +84,16 @@
       {"id": "smart-express", "name": "SMART Sandbox Express (scripted: no login, fixed patient)", "vendor": "smart-public",
        "line": "4 Sandbox Way", "city": "Cambridge", "state": "MA", "postal": "02139",
        "launch": {"client_type": "public", "pkce": "always", "skip_login": true, "skip_auth": true,
-                  "patient": ["12edb5a0-ec71-45b7-aff6-0fef1c382881"]}}
+                  "patient": ["12edb5a0-ec71-45b7-aff6-0fef1c382881"]}},
+      {"id": "smart-express-symmetric", "name": "SMART Sandbox Express symmetric (scripted)", "vendor": "smart-symmetric",
+       "line": "5 Sandbox Way", "city": "Cambridge", "state": "MA", "postal": "02139",
+       "launch": {"client_type": "confidential-symmetric", "pkce": "auto", "client_secret": "${PA_SMART_SANDBOX_CLIENT_SECRET}",
+                  "skip_login": true, "skip_auth": true, "patient": ["80a75b5a-fd30-4f38-895d-d8098fe7206e"]}},
+      {"id": "smart-express-asymmetric", "name": "SMART Sandbox Express asymmetric (scripted)", "vendor": "smart-asymmetric",
+       "line": "6 Sandbox Way", "city": "Cambridge", "state": "MA", "postal": "02139",
+       "launch": {"client_type": "confidential-asymmetric", "pkce": "auto",
+                  "jwks_public_key": "/code/compose/dev-keys/smart-client-dev.pub.pem", "kid": "sketch-1", "alg": "RS384",
+                  "skip_login": true, "skip_auth": true, "patient": ["80a75b5a-fd30-4f38-895d-d8098fe7206e"]}}
     ]
   }
 }

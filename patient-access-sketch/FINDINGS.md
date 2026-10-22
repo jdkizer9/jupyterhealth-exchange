@@ -71,3 +71,39 @@ Copied from elsewhere: the Brands Bundle importer and the sample bundle (JHE), t
 5. **fhir-client's `explicitPatient` quirk doesn't apply server-side.** The JS table needed it
    because `patient.request` could not scope Device; the Python puller adds `patient=` to every
    search itself, so the flag is now meaningless. Ported as data, but that row's quirk is moot.
+
+## M2: upstream OAuth (2026-10-22)
+
+Built: `core/smart.py` (discovery, PKCE S256, authorize URL, code exchange with all four client
+auth methods, `private_key_jwt` assertions), `core/http.py` (timeouts, GET-only retries honouring
+`Retry-After`), `core/flow.py` (`start_upstream_auth`, `finish_upstream_auth`), the ORM
+`AuthAttemptStore` with single-use `consume`, `/launch`, `/callback`, `/status/{id}`,
+`/api/jobs/{id}`, and `scripts/smoke.py` (browserless, follows the sandbox's redirects).
+
+Demos:
+- Browserless, all three client types against the hosted sandbox: public + PKCE, confidential
+  symmetric (`client_secret_basic`), confidential asymmetric (`private_key_jwt`, RS384). Each
+  authorizes in under a second and creates a `queued` job with 20 granted scopes.
+- The sandbox really verifies the assertion: the same flow signed with a random key gets
+  `401 Invalid token. invalid signature`.
+- Playwright, real UI: link → picker → "confidential asymmetric" → sandbox patient login →
+  approve screen listing every requested type → back on `/status/{id}`.
+
+The ported Python for phases 2–3 is about 330 lines (`smart.py` + `flow.py` + `http.py`), replacing
+fhir-client.js's discovery, PKCE and token exchange plus four sessionStorage keys.
+
+1. **Spending the identity and creating the job must be atomic, and core cannot say so.**
+   `finish_upstream_auth` calls `identity.commit` then `jobs.create`; if the second fails, the link
+   is spent with no job. The Django view wraps the call in `transaction.atomic()`, which works
+   because both stores share the database, but core has no unit-of-work concept and a host with
+   stores in different places would get it wrong silently. A real build should either give core a
+   `transaction()` hook in `deps` or document that these two stores must share a transaction.
+2. **The callback must not depend on the session.** The `AuthAttempt` carries the participant, so
+   a browser that loses its cookie across the EHR round trip (Safari ITP, a different tab) still
+   lands. Status visibility then uses "this session created it, or this session's participant
+   owns it".
+3. **Token lifetime on the sandbox is one hour.** That is the phase-4 budget M3 will measure.
+4. **One code path, three auth methods, chosen by the directory.** Swapping client auth needed no
+   code change, only which brand the patient picked. `VendorConfig` carrying the method is right.
+5. **Dev ergonomics:** the worker caches the module, so it needs autoreload like runserver (added
+   with Django's reloader under DEBUG). Config file edits still need a restart of both services.

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from django.db import connection
+from django.db import connection, transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
+from patient_access.core.flow import FlowError, finish_upstream_auth, start_upstream_auth
 from patient_access.core.interfaces import IdentityError
 from patient_access.core.models import InboundRequest, Participant
 
@@ -102,8 +103,106 @@ def launch(request: HttpRequest) -> HttpResponse:
     participant = _participant(request)
     if participant is None:
         return _error(request, "Please open the personal link from your invitation first.", 403)
+    m = get_module()
     try:
-        location = get_module().directory.location(request.POST.get("location_id", ""))
+        url = start_upstream_auth(
+            participant=participant,
+            location_id=request.POST.get("location_id", ""),
+            directory=m.directory,
+            vendors=m.vendors,
+            attempts=m.auth_attempts,
+            redirect_uri=m.redirect_uri,
+            destination=m.default_destination,
+            http=m.http,
+            clock=m.clock,
+        )
+    except FlowError as e:
+        return _error(request, str(e))
+    return redirect(url)
+
+
+# --- phase 3 callback -------------------------------------------------------------------------
+
+
+@require_GET
+def callback(request: HttpRequest) -> HttpResponse:
+    m = get_module()
+    try:
+        # One transaction: spending the identity and creating the job must not half-happen.
+        with transaction.atomic():
+            job_id = finish_upstream_auth(
+                state=request.GET.get("state", ""),
+                code=request.GET.get("code"),
+                error=request.GET.get("error"),
+                error_description=request.GET.get("error_description"),
+                directory=m.directory,
+                vendors=m.vendors,
+                attempts=m.auth_attempts,
+                identity=m.identity,
+                jobs=m.jobs,
+                dispatcher=m.dispatcher,
+                http=m.http,
+                clock=m.clock,
+            )
+    except FlowError as e:
+        return _error(request, str(e))
+    # The attempt carried the participant, so the callback works even if the session cookie did
+    # not survive the EHR round trip; record the job on whatever session we have.
+    request.session.setdefault("pa_jobs", [])
+    request.session["pa_jobs"] = [*request.session["pa_jobs"], job_id]
+    return redirect("patient_access:status", job_id=job_id)
+
+
+# --- status -----------------------------------------------------------------------------------
+
+
+def _visible_job(request: HttpRequest, job_id: str):
+    """A job is visible to the session that created it, or to its participant."""
+    participant = _participant(request)
+    try:
+        job = get_module().jobs.get(job_id)
     except KeyError:
-        return _error(request, "That organization is not in the directory.")
-    return render(request, "patient_access/launch_stub.html", {"location": location, "participant": participant})
+        return None
+    if job_id in request.session.get("pa_jobs", []) or (participant and participant.ref == job.participant.ref):
+        return job
+    return None
+
+
+def _job_json(job) -> dict:
+    return {
+        "id": job.id,
+        "status": str(job.status),
+        "terminal": job.status.terminal,
+        "source": {"brand": job.source.brand_name, "location": job.source.location_name},
+        "outcomes": [
+            {
+                "label": o.label,
+                "status": o.status,
+                "count": o.count,
+                "pages": o.pages,
+                "error": o.error,
+                "capped": o.capped,
+            }
+            for o in job.outcomes
+        ],
+        "documents": vars(job.documents),
+        "receipt": vars(job.receipt) if job.receipt else None,
+        "failure": job.failure,
+        "attempts": job.attempts,
+    }
+
+
+@require_GET
+def status(request: HttpRequest, job_id: str) -> HttpResponse:
+    job = _visible_job(request, job_id)
+    if job is None:
+        return _error(request, "We couldn't find that request.", 404)
+    return render(request, "patient_access/status.html", {"job": _job_json(job)})
+
+
+@require_GET
+def api_job(request: HttpRequest, job_id: str) -> JsonResponse:
+    job = _visible_job(request, job_id)
+    if job is None:
+        return JsonResponse({"error": "not found"}, status=404)
+    return JsonResponse(_job_json(job))

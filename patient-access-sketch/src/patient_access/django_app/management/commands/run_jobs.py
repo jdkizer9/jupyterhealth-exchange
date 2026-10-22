@@ -2,7 +2,9 @@
 
 import signal
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import autoreload
 
 from patient_access.dispatch.db_polling import DbPollingDispatcher, poll_forever, poll_once, sweep, worker_id
 
@@ -14,8 +16,16 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true", help="Run every runnable job, then exit (cron).")
+        parser.add_argument("--noreload", action="store_true", help="With DEBUG, don't restart on code changes.")
 
     def handle(self, *args, **options):
+        if settings.DEBUG and not options["once"] and not options["noreload"]:
+            # Like runserver: a dev worker picks up code and config edits without a manual restart.
+            autoreload.run_with_reloader(self.inner_run, **options)
+        else:
+            self.inner_run(**options)
+
+    def inner_run(self, **options):
         module = get_module()
         dispatcher = module.dispatcher
         if not isinstance(dispatcher, DbPollingDispatcher):

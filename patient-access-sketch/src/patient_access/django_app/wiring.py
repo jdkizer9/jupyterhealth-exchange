@@ -11,13 +11,17 @@ import inspect
 import json
 import os
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
 from functools import cache
 from typing import Any
 
+import requests
 from django.conf import settings
 from django.utils.module_loading import import_string
 
+from patient_access.core.http import session as http_session
 from patient_access.core.interfaces import (
     AuthAttemptStore,
     Directory,
@@ -26,7 +30,7 @@ from patient_access.core.interfaces import (
     JobStore,
     Spool,
 )
-from patient_access.core.pipeline import Deps, Destination, run_job
+from patient_access.core.pipeline import Deps, Destination, run_job, utcnow
 from patient_access.core.puller import fetch
 from patient_access.core.vendors import VendorConfig, load_vendors
 
@@ -71,6 +75,8 @@ class Module:
     deps: Deps
     claimer: OrmJobClaimer
     site_url: str
+    http: requests.Session
+    clock: Callable[[], datetime] = field(default=utcnow)
 
     def run(self, job_id: str):
         return run_job(job_id, self.deps)
@@ -119,6 +125,7 @@ def get_module() -> Module:
         deps=deps,
         claimer=OrmJobClaimer(max_attempts=max_attempts),
         site_url=settings.SITE_URL,
+        http=http_session(),
     )
     services["run"] = module.run
     module.dispatcher = build(config["dispatcher"], services)
