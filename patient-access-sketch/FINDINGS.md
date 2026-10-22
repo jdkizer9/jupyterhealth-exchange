@@ -143,3 +143,39 @@ So the token budget is not close to binding for resources, even at 10× this pat
 5. **Ops wrinkles:** `docker compose restart` does not pick up a changed `environment:` (the
    worker kept failing to load config until recreated with `up -d`); Django's reloader runs the
    command in a thread, where `signal.signal` is not allowed.
+
+## M4: format and sink, scenario A complete (2026-10-22)
+
+Built: `CompositionBundleFormatter` (deterministic `urn:uuid` fullUrls, reference rewriting,
+Composition with sections, sidecar attachment rewriting ready for M5, a metadata companion),
+`LocalDirectorySink`, `S3Sink`, Silo in compose (bucket created on first use),
+`scripts/run-smoke-a.sh`. The destination is one env var (`PA_DESTINATION=local|s3`).
+
+Demos:
+- Scripted: deep link → sandbox (skip-login brand) → 2,121 resources → `bundle.json` (2.3 MB)
+  and `metadata.json`, first under `local/out/`, then in Silo at
+  `s3://patient-access/pulls/{ref}/{job}/`. 10.6 s end to end both times. Spool directory empty
+  afterwards.
+- Playwright: a link minted with `--brand` and `--attrs '{"study":"demo"}'` → confirm page →
+  sandbox login → approve → status page shows the receipt with the S3 location; the metadata in
+  Silo carries `ref`, `study` and the link id; reopening the link says "already been used".
+- The bundle validates as an R4B `Bundle` with `fhir.resources` 7.1.0, the Composition is first,
+  and every one of 7,234 internal references resolves to an entry.
+
+1. **The pull is not self-contained.** 520 references point at `Practitioner` (277) and
+   `Organization` (243) the query table never fetches; JHE's table doesn't either. The formatter
+   makes them absolute EHR URLs, which a consumer can't dereference without a token. A real build
+   needs a "referenced resources" pass in phase 4 (collect distinct references to
+   Practitioner/Organization/Location/Medication, read each once, scopes permitting). USCDI
+   includes provenance-ish data that lives exactly there. **This is a design gap, not a sketch gap.**
+2. **`Unit` is not always a FHIR Bundle.** The metadata companion is plain JSON, so units have a
+   `kind` ("document", "batch", "metadata") and sinks declare which kinds they accept. The
+   Destination pairing check covers it.
+3. **The Composition formatter holds the whole bundle in memory**, after two passes over the spool
+   (ids, then content). Fine at 2 MB; at 50k resources it would be tens of MB of dicts plus the
+   serialised copy. If that matters, `Unit.body` should become a byte stream the formatter writes
+   incrementally (JSON streaming), and S3 should use multipart upload. Not needed for the sketch.
+4. **Local-directory and S3 sinks are the same sink over two key/value stores.** Both write
+   blobs, then the bundle, then metadata last as the completion marker, and abort deletes what they
+   wrote. A real build would have one `ObjectStoreSink` with `put`/`delete` backends.
+5. **Q3 (same worker, configuration only) holds for A:** switching local ↔ S3 changed one env var.

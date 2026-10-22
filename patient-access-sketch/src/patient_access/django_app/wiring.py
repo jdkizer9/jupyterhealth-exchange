@@ -119,7 +119,7 @@ def get_module() -> Module:
         jobs=jobs,
         spool=spool,
         destinations=destinations,
-        default_destination=config["default_destination"],
+        default_destination=_subst(config["default_destination"]),
         dispatcher=None,  # type: ignore[arg-type] - set below; InlineDispatcher needs the module's run
         vendors=vendors,
         deps=deps,

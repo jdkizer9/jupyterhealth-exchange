@@ -82,6 +82,7 @@ source_modules = [
     "patient_access.identity",
     "patient_access.dispatch",
     "patient_access.spool.local_disk",
+    "patient_access.destinations.local_dir",
     # add each non-S3 destination module as it lands
 ]
 forbidden_modules = ["boto3", "botocore"]
