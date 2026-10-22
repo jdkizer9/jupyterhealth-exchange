@@ -87,8 +87,12 @@ class Module:
 
 
 def load_config(path: str | None = None) -> dict:
+    """A config may start with {"extends": "<path>"}: top-level keys then replace the base's."""
     with open(path or settings.PATIENT_ACCESS_CONFIG, encoding="utf-8") as f:
-        return json.load(f)
+        config = json.load(f)
+    if base := config.pop("extends", None):
+        return {**load_config(base), **config}
+    return config
 
 
 @cache

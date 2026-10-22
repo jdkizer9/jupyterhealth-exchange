@@ -1,0 +1,17 @@
+{
+  "extends": "/code/compose/dev-config.json",
+  "identity": {
+    "class": "patient_access.identity.jhe_invitation.JheInvitationIdentity",
+    "options": {"base_url": "${PA_JHE_URL}", "public_host": "${PA_JHE_PUBLIC_HOST}"}
+  },
+  "destinations": {
+    "jhe": {
+      "formatter": {"class": "patient_access.formatters.r4_batch.R4BatchFormatter", "options": {"chunk": 100}},
+      "sink": {
+        "class": "patient_access.destinations.jhe.JheHttpSink",
+        "options": {"base_url": "${PA_JHE_URL}", "data_source_id": "${PA_JHE_DATA_SOURCE_ID}"}
+      }
+    }
+  },
+  "default_destination": "jhe"
+}

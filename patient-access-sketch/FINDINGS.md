@@ -211,3 +211,56 @@ foreign-host and cap paths are covered by unit tests against a fake server only 
    and fail with 401s mid-stream.
 5. **Empty arrays are invalid FHIR.** The first cut added `"extension": []` to inline attachments;
    a schema validator in the smoke would have caught it. Worth adding to the real build's CI.
+
+## M6: scenario B against the local JHE stack (2026-10-22)
+
+Built: `JheInvitationIdentity` (redeems a JHE invitation server-side: invitation → grant → PKCE
+token exchange → profile), `R4BatchFormatter` (100-entry `batch` Bundles per type),
+`JheHttpSink` (identifier, `fhir_sources`, `/fhir-import/R4/` with per-entry tally, token revoke),
+`compose/dev-config-jhe.json` (extends the base config: only identity and destination change),
+`docker-compose.jhe.yml` (joins `jhe_default`, calls `http://jhe:8000`), and
+`scripts/jhe-setup.sh`, which adds one JHE client "Patient Access Sketch" with
+`invitation_url = http://localhost:8080/start?code=CODE` and issues an invitation for the seeded
+patient Peter. **No JHE code changed.**
+
+Demo: JHE invitation link → sketch `/start` (redeemed server-side) → picker → sandbox (skip-login
+brand) → worker → JHE. 2,121 records accepted into FhirSource 90004 for JHE patient 40001,
+0 rejected, 68 R4→R5 conversion warnings tallied by reason (dropped `Encounter.reasonCode`,
+`Procedure.reasonReference`), the sandbox patient id attached as a JHE `PatientIdentifier`, the
+patient's JHE token revoked at the end. 20.7 s. JHE's DB shows 2,121 `FhirAuxResource` rows on
+that source. Same worker image and code as scenario A; the deployment config differs in two keys.
+
+1. **Q3 holds: same worker, configuration only, two very different destinations.** The config
+   for B is A's config plus `identity` and `destination`, via a one-line `extends`.
+2. **JHE's dedupe depends on JHE's directory, which the module now owns.** A second pull created
+   a *new* FhirSource (90005) and stored all 2,121 records again instead of 409-ing them: JHE
+   reuses a source only when `ehr_base_url` matches a brand in *its own* `EhrBrand` table, and
+   "a source that resolves to no brand always creates". The sandbox iss isn't in JHE's table.
+   With real Epic brands (imported into both) it would reuse, but the coupling is real: when the
+   module owns the directory and JHE keeps its own, any brand only the module knows duplicates on
+   every pull. Fix options: mounted mode shares the tables (design §9.1's migration), or the JHE
+   sink sends the brand and JHE resolves source by (patient, data source, iss) instead of brand.
+   The 409 duplicate path itself was therefore not exercised end to end (unit-tested only).
+3. **JHE accepted records for a patient who never consented in JHE's UI.** The sketch bypasses
+   JHE's hub and consent screens (by design for the sketch), and neither `fhir_sources` nor
+   `/fhir-import/R4/` checked consent for the EHR Patient Portal data source. Possibly intended
+   (the token is the patient's own), but worth confirming with the JHE team: today consent is
+   enforced by the browser flow, not the API.
+4. **The JHE sink must read the JHE identity's secret.** `destinations/jhe.py` imports
+   `JHE_TOKEN` from `identity/jhe_invitation.py`. Identity and sink are coupled the same way
+   formatter and sink are; a real build should make that pairing explicit (or name the secret in
+   config) rather than share a constant.
+5. **Redemption happens on open, not on commit.** JHE spends the invitation when `resolve` calls
+   it; JHE's own 12-hour "recently redeemed" window is what makes reopening work. Different from
+   the deep link's "spend at commit", and owned by JHE, not the module. Fine, but the two
+   identity providers have different single-use semantics, which the receipt should say.
+6. **Compose networks collide on service names.** Joining `jhe_default` made `db` resolve to JHE's
+   Postgres (password failure). The sketch now addresses its own services by aliases (`pa-db`,
+   `pa-s3`). Any host that runs the module beside JHE on one network has the same trap.
+7. **Revoking the JHE token at finish conflicts with retry.** If delivery fails after `finish`
+   revoked the token, a retry can't post. `abort` keeps it; `finish` only runs on success, so it
+   is right today, but a partial-success-then-retry design would need a refreshable credential.
+
+Left in your local JHE database by M6 (all for seeded patient Peter, id 40001): the
+"Patient Access Sketch" client and its links, two FhirSources (90004, 90005) with 2,121 rows each,
+one PatientIdentifier. JHE's `scripts/dev/reset.sh` removes everything.

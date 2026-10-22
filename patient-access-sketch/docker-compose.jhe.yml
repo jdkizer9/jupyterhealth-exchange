@@ -1,0 +1,30 @@
+# Scenario B: deliver into the JHE dev stack (project `jhe`, from the repo root's docker-compose.yml).
+#
+#   (cd .. && docker compose up -d)                          # JHE must be running
+#   scripts/jhe-setup.sh                                     # one JHE client row; prints an invitation link
+#   docker compose -f docker-compose.yml -f docker-compose.jhe.yml up -d
+#
+# web and worker join JHE's network and call it as http://jhe:8000, like JHE's own mcp service;
+# the browser only ever sees http://localhost:8080 (the sketch) and the EHR.
+
+x-pa-jhe: &pa-jhe
+  PA_CONFIG: /code/compose/dev-config-jhe.json
+  PA_JHE_URL: http://jhe:${JHE_PORT:-8000}
+  PA_JHE_PUBLIC_HOST: localhost:${JHE_PORT:-8000}
+  # Written by scripts/jhe-setup.sh: the "EHR Patient Portal" DataSource id in your JHE database.
+  PA_JHE_DATA_SOURCE_ID: ${PA_JHE_DATA_SOURCE_ID:?run scripts/jhe-setup.sh and export PA_JHE_DATA_SOURCE_ID}
+
+services:
+  web:
+    environment:
+      <<: *pa-jhe
+    networks: [default, jhe]
+  worker:
+    environment:
+      <<: *pa-jhe
+    networks: [default, jhe]
+
+networks:
+  jhe:
+    external: true
+    name: jhe_default

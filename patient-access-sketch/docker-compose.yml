@@ -23,7 +23,8 @@ x-pa-environment: &pa-environment
   PA_SECRET_KEY: dev-only-patient-access-sketch-django-secret-key-not-for-real-use
   # Fernet key that encrypts EHR tokens, participant secrets and per-job spool keys at rest.
   PA_DEPLOYMENT_KEY: 2cw8G2XTqJThyRDiiKGLg7kt_vSCKqOcEXxFCQtcAy4=
-  PA_DB_HOST: db
+  # Aliases, not service names: scenario B joins JHE's network, where `db` is JHE's Postgres.
+  PA_DB_HOST: pa-db
   PA_DB_PORT: "5432"
   PA_DB_NAME: patient_access
   PA_DB_USER: patient_access
@@ -38,13 +39,16 @@ x-pa-environment: &pa-environment
   PA_SMART_SANDBOX_CLIENT_SECRET: dev-only-sandbox-client-secret
   # Which configured destination new jobs deliver to: "s3" (Silo) or "local" (./local/out).
   PA_DESTINATION: ${PA_DESTINATION:-s3}
-  PA_S3_ENDPOINT: http://s3:9000
+  PA_S3_ENDPOINT: http://pa-s3:9000
   PA_S3_ACCESS_KEY: patient-access-dev
   PA_S3_SECRET_KEY: patient-access-dev-secret
 
 services:
   db:
     image: postgres:16
+    networks:
+      default:
+        aliases: [pa-db]
     environment:
       POSTGRES_DB: patient_access
       POSTGRES_USER: patient_access
@@ -65,6 +69,9 @@ services:
     # PGSTY Silo, the maintained MinIO fork (MinIO CE is archived). Same protocol, env vars,
     # console and lifecycle engine. Console: http://localhost:9001 (patient-access-dev / ...-secret).
     image: docker.io/pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    networks:
+      default:
+        aliases: [pa-s3]
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: patient-access-dev

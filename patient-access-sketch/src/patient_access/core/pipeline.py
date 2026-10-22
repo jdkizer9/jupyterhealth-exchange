@@ -164,6 +164,7 @@ def _finish(job: Job, deps: Deps) -> None:
         deps.spool.delete(job.spool_ref)
         job.spool_ref = None
     job.credentials.clear()
+    job.participant.secrets.clear()  # e.g. the JHE token: never outlives the job
     job.token_expires_at = None
     job.finished_at = deps.clock()
     deps.jobs.save(job)

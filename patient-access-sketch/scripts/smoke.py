@@ -26,12 +26,19 @@ def main() -> int:
     ap.add_argument("--until", default="queued", help="stop when the job reaches this status (or any terminal one)")
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--ref", default=f"smoke-{uuid.uuid4().hex[:8]}")
+    ap.add_argument("--link", help="use this entry link (e.g. a JHE invitation) instead of minting a deep link")
     args = ap.parse_args()
 
-    link = subprocess.check_output(["python", "manage.py", "mint_deeplink", "--ref", args.ref], text=True).strip()
+    link = (
+        args.link
+        or subprocess.check_output(["python", "manage.py", "mint_deeplink", "--ref", args.ref], text=True).strip()
+    )
     s = requests.Session()
     r = s.get(link.replace("http://localhost:8080", BASE), timeout=30)
-    r.raise_for_status()
+    if r.status_code != 200:
+        err = re.search(r'id="error">([^<]*)<', r.text)
+        print(f"start failed: {r.status_code} {err.group(1) if err else r.text[:300]}", file=sys.stderr)
+        return 5
     brands = s.get(f"{BASE}/api/brands", params={"q": "sandbox"}, timeout=30).json()["results"]
     match = [b for b in brands if args.brand in b["name"]]
     if len(match) != 1:
