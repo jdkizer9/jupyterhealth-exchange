@@ -3,6 +3,39 @@
 Running notes, one entry per milestone, written before moving on. What the sketch taught us about
 the design; not a changelog.
 
+## Summary: the exit questions (2026-10-22)
+
+| # | question (plan §1) | answer |
+|---|---|---|
+| Q1 | Do the plugs hold up as real code? | **Yes, with five amendments** (below). Core never imported Django or boto3; three import-linter contracts enforced it on every test run. |
+| Q2 | Fetch-all-first with a spool, inside one token? | **Yes, with lots of room.** The largest sandbox patient (2,121 resources) fetched in 11 s against a 1-hour token; 2.8 MB encrypted spool. A kill-mid-fetch test resumed correctly after one bug fix (M8). |
+| Q3 | Same worker, config only, S3 and JHE? | **Yes.** Scenario B's config is scenario A's plus two keys; JHE needed zero code changes and accepted 2,121 records. Dispatcher (polling ↔ Dramatiq) and spool (disk ↔ S3) also swap by config alone. |
+| Q4 | How much Python is the ported browser flow? | **About 520 lines** for discovery, PKCE, token exchange and the paged pull (`smart.py`, `flow.py`, `http.py`, `puller.py`), inside the report's 400–600 estimate. Documents add 180 more, which the browser never had. |
+| Q5 | Document retrieval against a sandbox? | **Half answered.** Inline attachments work end to end; the hosted sandbox has no `Binary` resources, so the download path is unit-tested only. Needs Epic. |
+| Q6 | Epic vs the reference sandbox? | **Not answered** (M7 deferred). One difference showed anyway: Epic's `category=clinical-note` filter hides every note on the reference server. |
+
+**Design amendments the code asked for**, in priority order:
+
+1. **A spool must make a type durable before the job may record it as done** (`SpoolHandle.flush`).
+   Without it a crash produced a silently incomplete pull (M8 finding 1).
+2. **A "referenced resources" pass in phase 4.** 520 references to Practitioner and Organization
+   point back into the EHR; the bundle isn't self-contained (M4 finding 1).
+3. **JHE's dedupe depends on JHE's own brand directory.** Any iss the module knows but JHE
+   doesn't creates a new FhirSource and duplicates the whole pull (M6 finding 2). Decide the
+   directory's single home before scenario B ships.
+4. **Spending the identity and creating the job must be one transaction**, which core cannot
+   express today (M2 finding 1).
+5. **Smaller interface changes:** `SinkSession.write(unit, spool)`; `Unit.kind` (not every unit is
+   a FHIR Bundle); a `JobClaimer` Protocol with `claim(job_id)` for broker workers;
+   `DeepLinkStore.is_consumed`; format and sink as one job status (`delivering`); query tables
+   that extend each other; the sweep independent of the dispatcher.
+
+**Open with the JHE team:** JHE's import API accepted records for a patient who never consented
+in its UI (M6 finding 3).
+
+**Not covered:** Epic (M7), the `Binary` download path against a real server, C-CDA,
+`private_key_jwt` beyond the reference sandbox, a browser run of scenario B, production concerns.
+
 ## M0: skeleton (2026-10-22)
 
 Built: package layout, core dataclasses and Protocols, `run_job` with resume/retry/terminal
