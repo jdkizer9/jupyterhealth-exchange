@@ -262,6 +262,16 @@ class OrmJobClaimer:
             JobRecord.objects.filter(id=r.id).update(lease_owner=worker_id, lease_expires_at=now + lease)
             return r.id
 
+    def claim(self, job_id: m.JobId, worker_id: str, lease: timedelta) -> bool:
+        """Lease one named job (broker-driven workers): only if it is not terminal and not leased."""
+        now = timezone.now()
+        return bool(
+            JobRecord.objects.filter(id=job_id)
+            .exclude(status__in=["done", "failed_terminal"])
+            .filter(Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lt=now))
+            .update(lease_owner=worker_id, lease_expires_at=now + lease)
+        )
+
     def release(self, job_id: m.JobId, worker_id: str) -> None:
         JobRecord.objects.filter(id=job_id, lease_owner=worker_id).update(lease_owner=None, lease_expires_at=None)
 

@@ -14,7 +14,7 @@ WORKDIR /code
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -e ".[django,s3,dev]"
+    uv pip install --system -e ".[django,s3,dramatiq,dev]"
 
 COPY . .
 

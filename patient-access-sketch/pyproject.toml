@@ -16,6 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 django = ["django==5.2.17", "psycopg[binary]>=3.2"]
 s3 = ["boto3>=1.35"]
+dramatiq = ["dramatiq[redis]==2.2.1"]
 dev = ["pytest>=8", "pytest-django>=4.9", "import-linter>=2.1"]
 
 [build-system]

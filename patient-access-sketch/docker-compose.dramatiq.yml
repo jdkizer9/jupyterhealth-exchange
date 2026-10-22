@@ -1,0 +1,25 @@
+# Stretch: swap the JobDispatcher from DB polling to Dramatiq on Redis. Nothing else changes.
+#   docker compose -f docker-compose.yml -f docker-compose.dramatiq.yml up -d --build
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  web:
+    environment:
+      PA_CONFIG: /code/compose/dev-config-dramatiq.json
+      PA_DRAMATIQ_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    command: ["dramatiq", "patient_access.django_app.dramatiq_worker", "--processes", "1", "--threads", "2"]
+    environment:
+      PA_CONFIG: /code/compose/dev-config-dramatiq.json
+      PA_DRAMATIQ_REDIS_URL: redis://redis:6379/0

@@ -314,3 +314,31 @@ Demos:
 5. **Lease length is the resume latency.** A crashed job waits out its 10-minute lease before
    another worker reclaims it. Fine for a background pull, but the status page shows "fetching"
    the whole time; a heartbeat-renewed short lease would show the stall sooner.
+
+## Stretch: DramatiqDispatcher on Redis (2026-10-22)
+
+Built: `dispatch/dramatiq_dispatcher.py` (dispatch sends the job id; the actor calls a registered
+runner), `django_app/dramatiq_worker.py` (the worker-side entry: Django setup, build the module,
+claim the job by id through the same lease, run, release), `OrmJobClaimer.claim(job_id)`, and
+`docker-compose.dramatiq.yml` (adds Redis, points `PA_CONFIG` at a config whose only change is
+`dispatcher`, and runs `dramatiq …` as the worker command). 88 lines in all; **no change to core,
+the plugs, the views or the stores' Protocols.**
+
+Demo: scenario A smoke with the override: web logged "sent to dramatiq queue", the Dramatiq worker
+fetched 2,121 resources and delivered them to Silo. 10.5 s, same as the polling worker.
+
+1. **The `JobDispatcher` seam held.** Swapping the execution model was one config key plus the
+   host's worker command, which is the claim design §7.2 made.
+2. **The worker side needs a claim by id, not just `claim_next`.** A broker delivers a specific
+   job, possibly twice, and may run beside a polling worker; leasing that id (and skipping if
+   leased or terminal) keeps "at most one runner per job" true under every dispatcher. The claimer
+   Protocol grows from three methods to four.
+3. **Lost messages are not recovered yet.** The invariant "the row is the system of record; a lost
+   message is recovered by the sweep" needs a periodic re-dispatch of jobs that are `queued` (or
+   `failed` and due) with no lease and no recent activity. With polling, the poll *is* that
+   sweep; with a broker, something must still run it (cron, or a Dramatiq periodic actor). The
+   design should say the sweep is independent of the dispatcher.
+4. **Broker libraries configure at import time.** Dramatiq binds actors to a global broker when
+   the module is imported, so the broker URL comes from the environment, not the plug's options,
+   and the runner is registered from the host's worker entry. The module also can't be named
+   `dramatiq.py` inside `dispatch/` without shadowing the library.
