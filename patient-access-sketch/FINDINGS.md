@@ -179,3 +179,35 @@ Demos:
    blobs, then the bundle, then metadata last as the completion marker, and abort deletes what they
    wrote. A real build would have one `ObjectStoreSink` with `put`/`delete` backends.
 5. **Q3 (same worker, configuration only) holds for A:** switching local ↔ S3 changed one env var.
+
+## M5: documents (2026-10-22)
+
+Built: `core/documents.py`, a second pass in phase 4 over `DocumentReference.content` (one item
+per document, by content-type preference) and `DiagnosticReport.presentedForm`; inline `data` and
+`Binary` URLs; a server that ignores `Accept` and returns a FHIR `Binary` JSON is unwrapped; count,
+per-document and total caps with reasons on the receipt; the token is never sent to a host other
+than the FHIR server. The formatter points attachments at `docs/{id}` sidecars and keeps the EHR
+URL in an extension; both sinks write the sidecars before the bundle.
+
+Demo: `scripts/run-smoke-a.sh "Express symmetric"` (patient `80a75b5a…`, the only one with a
+document): 152 resources plus `docs/DocumentReference-4900007-0` (text/plain, "Patient is a
+55-year-old presenting with chest pain.") in Silo, the bundle's attachment rewritten to that key,
+`metadata.json` listing it with its sha256. 6.5 s end to end. The Binary-URL, Binary-JSON,
+foreign-host and cap paths are covered by unit tests against a fake server only (see 1).
+
+1. **Q5 is only half answered.** The hosted sandbox has no `Binary` resources and no
+   `presentedForm`, so the URL download path has never touched a real server. It needs Epic's
+   sandbox (M7) or a richer FHIR test server before anyone trusts it.
+2. **Epic's query quirks are harmful elsewhere.** `DocumentReference?category=clinical-note`
+   returns nothing on the reference server, whose notes have no category. Query tables are
+   per-vendor in practice, and most rows are shared, so tables now support
+   `{"extends": "uscdi", "override": {...}, "drop": [...]}`. The browser's single table would
+   have silently missed every note outside Epic.
+3. **Choosing one content item per DocumentReference needs a preference list**, and the right
+   order depends on the consumer (a study may want the PDF, a pipeline the text). It is on
+   `DocumentPolicy` per vendor today; it probably belongs to the destination instead.
+4. **The token-expiry margin check had to be shared** between the resource pages and the
+   document downloads (`FhirClient.ensure_valid`), or a long document pass would run past expiry
+   and fail with 401s mid-stream.
+5. **Empty arrays are invalid FHIR.** The first cut added `"extension": []` to inline attachments;
+   a schema validator in the smoke would have caught it. Worth adding to the real build's CI.

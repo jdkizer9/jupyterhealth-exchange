@@ -145,9 +145,8 @@ class CompositionBundleFormatter:
             if meta is None:
                 continue
             key = f"docs/{blob_id}"
-            exts = att.setdefault("extension", [])
             if att.get("url"):
-                exts.append({"url": ORIGINAL_URL_EXT, "valueUrl": att["url"]})
+                att.setdefault("extension", []).append({"url": ORIGINAL_URL_EXT, "valueUrl": att["url"]})
             att.pop("data", None)
             att["url"] = key
             att["size"] = meta.size

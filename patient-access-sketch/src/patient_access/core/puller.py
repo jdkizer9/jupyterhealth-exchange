@@ -51,9 +51,12 @@ class FhirClient:
         self.http.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/fhir+json"})
         self.requests = 0
 
-    def get(self, url: str, params: dict | None = None) -> requests.Response:
+    def ensure_valid(self) -> None:
         if self.expires_at and datetime.now(UTC) >= self.expires_at - EXPIRY_MARGIN:
             raise TokenExpired()
+
+    def get(self, url: str, params: dict | None = None) -> requests.Response:
+        self.ensure_valid()
         self.requests += 1
         r = self.http.get(url, params=params, timeout=self.vendor.timeout_seconds)
         if r.status_code == 401:

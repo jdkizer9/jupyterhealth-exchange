@@ -89,12 +89,38 @@ def _to_v2(scope: str) -> str:
     return scope[: -len(".read")] + ".rs" if scope.endswith(".read") else scope
 
 
+def _load_tables(raw: Mapping[str, Any]) -> dict[str, tuple[QuerySpec, ...]]:
+    """A table is a list of rows, or {"extends": name, "override": {label: {field: value}}, "drop": [labels]}."""
+    tables: dict[str, tuple[QuerySpec, ...]] = {}
+
+    def resolve(name: str, seen: tuple[str, ...] = ()) -> tuple[QuerySpec, ...]:
+        if name in tables:
+            return tables[name]
+        if name in seen or name not in raw:
+            raise ConfigError(f"query table {name!r} is unknown or circular")
+        spec = raw[name]
+        if isinstance(spec, list):
+            rows = tuple(QuerySpec(**row) for row in spec)
+        else:
+            base = resolve(spec["extends"], (*seen, name))
+            overrides = spec.get("override") or {}
+            unknown = set(overrides) - {q.label for q in base}
+            if unknown:
+                raise ConfigError(f"query table {name!r} overrides unknown rows {sorted(unknown)}")
+            drop = set(spec.get("drop") or [])
+            rows = tuple(QuerySpec(**{**q.__dict__, **overrides.get(q.label, {})}) for q in base if q.label not in drop)
+        tables[name] = rows
+        return rows
+
+    for name in raw:
+        resolve(name)
+    return tables
+
+
 def load_vendors(config: Mapping[str, Any], environ: Mapping[str, str] | None = None) -> dict[str, VendorConfig]:
     """Build VendorConfigs from the `vendors` and `query_tables` sections of a deployment config."""
     environ = os.environ if environ is None else environ
-    tables = {
-        name: tuple(QuerySpec(**row) for row in rows) for name, rows in (config.get("query_tables") or {}).items()
-    }
+    tables = _load_tables(config.get("query_tables") or {})
     vendors: dict[str, VendorConfig] = {}
     for name, raw in (config.get("vendors") or {}).items():
         raw = dict(raw)

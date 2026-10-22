@@ -34,14 +34,14 @@
     "smart-public": {
       "client_id": "patient-access-sketch",
       "auth_method": "public",
-      "queries": "uscdi",
+      "queries": "smart-reference",
       "base_scopes": ["launch/patient", "openid", "fhirUser"]
     },
     "smart-symmetric": {
       "client_id": "patient-access-sketch",
       "auth_method": "client_secret_basic",
       "client_secret_env": "PA_SMART_SANDBOX_CLIENT_SECRET",
-      "queries": "uscdi",
+      "queries": "smart-reference",
       "base_scopes": ["launch/patient", "openid", "fhirUser"]
     },
     "smart-asymmetric": {
@@ -50,7 +50,7 @@
       "private_key_path": "/code/compose/dev-keys/smart-client-dev.pem",
       "key_id": "sketch-1",
       "jwt_alg": "RS384",
-      "queries": "uscdi",
+      "queries": "smart-reference",
       "base_scopes": ["launch/patient", "openid", "fhirUser"]
     }
   },
@@ -75,7 +75,12 @@
       {"label": "Service Requests", "resource_type": "ServiceRequest", "query": "ServiceRequest", "scope": "patient/ServiceRequest.read"},
       {"label": "Devices", "resource_type": "Device", "query": "Device", "explicit_patient": true, "scope": "patient/Device.read"},
       {"label": "Questionnaire Responses", "resource_type": "QuestionnaireResponse", "query": "QuestionnaireResponse", "scope": "patient/QuestionnaireResponse.read"}
-    ]
+    ],
+    "smart-reference": {
+      "extends": "uscdi",
+      "override": {"Documents": {"query": "DocumentReference"}},
+      "_why": "The reference server leaves DocumentReference.category empty; Epic's clinical-note filter would hide every note."
+    }
   },
 
   "seed": {
