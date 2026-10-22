@@ -1,0 +1,18 @@
+{
+  "identity": {"class": "patient_access.testing.memory.StaticIdentity", "options": {}},
+  "spool": {"class": "patient_access.spool.local_disk.LocalDiskSpool", "options": {"root": "${PA_SPOOL_DIR}"}},
+  "destinations": {
+    "local": {
+      "formatter": {"class": "patient_access.testing.memory.PassthroughFormatter"},
+      "sink": {"class": "patient_access.testing.memory.MemorySink"}
+    }
+  },
+  "default_destination": "local",
+  "dispatcher": {
+    "class": "patient_access.dispatch.db_polling.DbPollingDispatcher",
+    "options": {"interval_seconds": 2, "lease_seconds": 600, "sweep_every": 10, "spool_max_age_hours": 24}
+  },
+  "max_attempts": 3,
+  "vendors": {},
+  "query_tables": {}
+}
