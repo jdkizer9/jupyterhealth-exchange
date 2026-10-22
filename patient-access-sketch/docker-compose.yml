@@ -31,7 +31,8 @@ x-pa-environment: &pa-environment
   PA_DB_PASSWORD: patient_access
   PA_SITE_URL: http://localhost:${PA_PORT:-8080}
   PA_ALLOWED_HOSTS: localhost,127.0.0.1,web
-  PA_CONFIG: /code/compose/dev-config.json
+  # Deployment config; dev-config-s3spool.json puts the spool in Silo instead of local disk.
+  PA_CONFIG: ${PA_CONFIG:-/code/compose/dev-config.json}
   PA_SPOOL_DIR: /code/local/spool
   PA_OUT_DIR: /code/local/out
   # The sandbox accepts whatever secret the launch options carry; this one is baked into the

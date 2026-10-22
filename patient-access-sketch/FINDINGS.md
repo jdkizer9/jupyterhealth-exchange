@@ -264,3 +264,53 @@ that source. Same worker image and code as scenario A; the deployment config dif
 Left in your local JHE database by M6 (all for seeded patient Peter, id 40001): the
 "Patient Access Sketch" client and its links, two FhirSources (90004, 90005) with 2,121 rows each,
 one PatientIdentifier. JHE's `scripts/dev/reset.sh` removes everything.
+
+## M7: Epic sandbox (skipped, 2026-10-22)
+
+Not attempted: it needs a new Epic app registration, which is deferred (plan §7 item 2). Q6 and
+the real `Binary` path (M5 finding 1) stay open until then.
+
+## M8: S3 staging spool and crash test (2026-10-22)
+
+Built: `S3StagingSpool` (per-type NDJSON chunks, each object Fernet-encrypted with the job's key;
+blobs and blob index likewise; a bucket lifecycle rule `expire-staging`, 1 day on `staging/`;
+`delete` and `sweep` by prefix), `compose/dev-config-s3spool.json` (extends the base config, swaps
+only `spool`), and an integration test against Silo.
+
+Demos:
+1. **Kill the worker mid-fetch (S3 spool).** After 7 of 18 query rows finished, `docker compose
+   kill worker`. Staging held 5 encrypted chunks (the 5 non-empty finished types), all opaque
+   Fernet tokens. With the lease expired, the restarted worker resumed: attempt 2 skipped the
+   finished types (49 requests instead of 56), delivered all 2,121 resources, and emptied staging.
+   The same test passed on the local-disk spool.
+2. **Orphan, crypto-shredded.** A job ended while its staging objects remained: its key gone from
+   the row, the objects fail with `InvalidToken` under any other key, and `sweep` (keep = spools of
+   live jobs) removed them. An orphan local-disk directory from a test that never stored its key
+   was swept the same way.
+3. **The lifecycle backstop is real on Silo.** With a past-dated expiration rule on a probe prefix,
+   a write there returns 200 and is gone from listings immediately; a control object elsewhere
+   stays. The 1-day rule on `staging/` can't be watched in a session, but the engine enforcing it
+   is live, as MinIO's was.
+4. **Audit.** Of 15 terminal jobs, none holds credentials, participant secrets or (after fixing a
+   hand-edited row) a spool ref.
+
+1. **The crash test found a real bug: an "ok" outcome over data that was never written.** Both
+   spools buffer (Python file buffers on disk; in-memory chunks for S3). The puller saved a type's
+   outcome as `ok` while its resources were still buffered, so a crash lost them *and* resume
+   skipped them, delivering a silently incomplete pull. Fix: `SpoolHandle.flush(type)` is now
+   part of the Protocol, and the puller calls it before saving the outcome (local disk also
+   `fsync`s). **The design needs this rule written down: a spool must make a type durable before
+   the job may say it is done.** No unit test with in-memory plugs could have found it.
+2. **S3 can't append**, so the S3 spool is chunked. That is invisible to core because resume is
+   already per type (M3 finding 1), which is what made the chunked layout safe.
+3. **Ending a job by hand bypasses crypto-shred bookkeeping.** My manual "abandon" edit left a
+   `spool_ref` behind. A real build needs an operator command that ends a job through core
+   (`_finish`), not ad hoc SQL.
+4. **Which spool a process uses is deployment config, and processes can disagree.** One `up`
+   without the env var silently gave web and worker the local-disk spool while I believed they
+   used S3. Harmless here (only the worker touches the spool), but a host that splits fetch and
+   delivery across processes must pin one spool config, or the spool should record its kind on
+   the job.
+5. **Lease length is the resume latency.** A crashed job waits out its 10-minute lease before
+   another worker reclaims it. Fine for a background pull, but the status page shows "fetching"
+   the whole time; a heartbeat-renewed short lease would show the stall sooner.

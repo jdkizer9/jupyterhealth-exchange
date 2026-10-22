@@ -58,6 +58,12 @@ class LocalDiskSpoolHandle:
         for f in self._files.values():
             f.flush()
 
+    def flush(self, resource_type: str) -> None:
+        f = self._files.get(resource_type)
+        if f is not None:
+            f.flush()
+            os.fsync(f.fileno())
+
     def has_resource(self, resource_type: str, resource_id: str) -> bool:
         return any(r.get("id") == resource_id for r in self.iter_type(resource_type))
 

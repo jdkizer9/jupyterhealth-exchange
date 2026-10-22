@@ -173,6 +173,7 @@ def fetch(
                 o.status, o.error = "error", f"network: {type(e).__name__}"
             except ValueError as e:  # bad JSON
                 o.status, o.error = "error", f"unreadable response: {e}"[:200]
+        spool.flush(resource_type)  # durable before the outcome that says so is saved
         save()
 
     if not expired:

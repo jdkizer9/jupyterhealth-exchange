@@ -116,6 +116,9 @@ class InMemorySpoolHandle:
         self._s["bytes"] += len(line)
         return len(line)
 
+    def flush(self, resource_type: str) -> None:
+        pass
+
     def has_resource(self, resource_type: str, resource_id: str) -> bool:
         return any(json.loads(line).get("id") == resource_id for line in self._s["types"].get(resource_type, []))
 

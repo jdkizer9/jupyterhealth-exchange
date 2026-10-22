@@ -79,6 +79,11 @@ class SpoolHandle(Protocol):
 
     def has_resource(self, resource_type: str, resource_id: str) -> bool: ...
 
+    def flush(self, resource_type: str) -> None:
+        """Make everything appended for this type durable. The puller calls it before recording the
+        type as done, so a crash can never leave an outcome that says "ok" over data that was lost."""
+        ...
+
     def reset_type(self, resource_type: str) -> None:
         """Drop what a previous, unfinished attempt wrote for this type (resume)."""
         ...

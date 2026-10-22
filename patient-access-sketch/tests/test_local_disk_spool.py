@@ -40,6 +40,16 @@ def test_reopen_with_same_key_resumes(tmp_path):
     assert h2.index().types == {}
 
 
+def test_flushed_data_survives_a_crash(tmp_path):
+    spool = LocalDiskSpool(str(tmp_path))
+    key = os.urandom(32)
+    h = spool.open(_job(), key)
+    h.append("Condition", {"id": "c1"})
+    h.flush("Condition")
+    # The worker dies here: no close(). A new process reopens the spool.
+    assert [r["id"] for r in spool.open(_job(), key).iter_type("Condition")] == ["c1"]
+
+
 def test_sweep_keeps_live_spools(tmp_path):
     spool = LocalDiskSpool(str(tmp_path))
     (tmp_path / "live").mkdir()
