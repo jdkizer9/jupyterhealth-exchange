@@ -62,7 +62,7 @@ What's running:
 
 Emails (patient invitations, signup verification, login codes) print to `docker compose logs jhe`.
 
-Ports already in use? Override them per run, for example `JHE_PORT=8010 JHE_DB_PORT=5442 MCP_PORT=8411 docker compose up`. Everything that embeds the site URL follows `JHE_PORT`.
+Ports already in use? Set `JHE_PORT`, `JHE_DB_PORT` and `MCP_PORT` in a root `.env` (see `.env.example`), or per run: `JHE_PORT=8010 JHE_DB_PORT=5442 MCP_PORT=8411 docker compose up`. The seeded OAuth redirect URIs and site URL follow `JHE_PORT`, but they are written when the database is seeded, so run `scripts/dev/reset.sh` after changing it. Two seeded client invitation URLs (Open Wearables, EHR Patient Portal) are fixed at `localhost:8001` / `localhost:8000`; edit them under Clients if you need them.
 
 Configuration lives in [compose/environment/](compose/environment/README.md). The committed values are public, local-only development values; never use them in a deployment.
 
@@ -77,6 +77,32 @@ Helper scripts:
 | `scripts/dev/check.sh [--quick]` | lint, format, missing-migration check, backend and frontend tests, all in containers; what CI and pre-commit.ci will check |
 
 The test and check scripts use their own compose project (`docker-compose.test.yml`), so they never touch your dev data, and need nothing installed but Docker.
+
+### Trying out the local stack
+
+The examples use the default ports; substitute yours.
+
+**Web UI.** Log in at http://localhost:8000 as `manager_mary@example.com` / `Jhe1234!` and browse Organizations → Studies → Patients → Observations. Generating an invitation with "send email" prints the email to `docker compose logs jhe`.
+
+**REST and FHIR APIs.** Get a token for the admin user, then query:
+
+```
+TOKEN=$(scripts/dev/bruno-token.sh | awk '/Token:/{print $2}')
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/studies
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8000/FHIR/R5/Observation?patient=40001"
+```
+
+`bruno-token.sh` makes the user a manager of every organization, so mint tokens for `admin@example.com` (the default) rather than for an account whose permissions you want to test. Observation uploads go to `POST /FHIR/R5/Observation` with `Content-Type: application/json`, a `subject` of `Patient/<id>`, a `device` of `Device/<id>` (a personal-device data source on the patient's study) and the Open mHealth JSON base64-encoded in `valueAttachment.data`. Records imported from an EHR are returned only with `_source:below=https://jupyterhealth.org/fhir/fhir-source/`.
+
+**MCP server.** Add it to an MCP client, for example Claude Code:
+
+```
+claude mcp add --transport http jhe-local http://localhost:8401/mcp
+```
+
+Authenticate (in Claude Code, `/mcp` → `jhe-local`), log in to JHE in the browser, then ask about your studies and patients. Every tool call runs as the logged-in user, so logging in as a different seeded user shows different studies. `docker compose logs mcp` shows an audit line per call. The MCP server keeps sessions in memory, so reconnect after restarting the `mcp` container.
+
+**EHR Patient Portal against the Epic sandbox.** The shared Epic sandbox app only redirects back to `http://localhost:8000`, so run JHE on port 8000 (and `scripts/dev/reset.sh` if you changed it). Generate an invitation for patient 40001 with the "EHR Patient Portal" client, open it in a private window, choose "Epic Health System (Sandbox)" and sign in as one of the sandbox test patients listed on [fhir.epic.com](https://fhir.epic.com).
 | `scripts/dev/bruno-token.sh` | API token for the [Bruno](https://www.usebruno.com/) collection in `opencollection/JHE/`, or for curl |
 
 ## Getting Started (without Docker)
