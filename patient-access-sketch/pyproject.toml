@@ -103,6 +103,7 @@ source_modules = [
     "patient_access.dispatch",
     "patient_access.spool.local_disk",
     "patient_access.destinations.local_dir",
+    "patient_access.destinations.layout",
     "patient_access.destinations.jhe",
     # add each non-S3 destination module as it lands
 ]

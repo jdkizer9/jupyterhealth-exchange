@@ -1,4 +1,5 @@
-"""S3Sink: pulls/{participant ref}/{job}/bundle.json, metadata.json, docs/{id} (design §4.1).
+"""S3Sink: {layout}/bundle.json, metadata.json, docs/{id} (design §4.1); layout defaults to
+pulls/{participant ref}/{job id} and is a consumer-configured template (see layout.py).
 
 Works against AWS or any S3-compatible store (Silo in the sketch). Server-side encryption is
 requested when `sse` is set ("aws:kms" with a key id in production; Silo dev uses none). abort()
@@ -17,7 +18,7 @@ from botocore.config import Config
 from patient_access.core.interfaces import Sink, SinkSession, SpoolHandle
 from patient_access.core.models import Job, Receipt, Unit, UnitOutcome
 
-from .local_dir import safe
+from .layout import KeyLayout, safe
 
 
 class S3Sink(Sink):
@@ -26,7 +27,7 @@ class S3Sink(Sink):
     def __init__(
         self,
         bucket: str,
-        prefix: str = "pulls",
+        layout: str = KeyLayout.DEFAULT,
         endpoint_url: str | None = None,
         region: str = "us-east-1",
         access_key: str | None = None,
@@ -36,7 +37,7 @@ class S3Sink(Sink):
         create_bucket: bool = False,
     ):
         self.bucket = bucket
-        self.prefix = prefix.strip("/")
+        self.layout = KeyLayout(layout)
         self.sse = sse
         self.kms_key_id = kms_key_id
         self.client = boto3.client(
@@ -60,7 +61,7 @@ class S3Sink(Sink):
 
     def begin(self, job: Job) -> S3Session:
         self._ensure_bucket()
-        return S3Session(self, f"{self.prefix}/{safe(job.participant.ref)}/{safe(job.id)}")
+        return S3Session(self, self.layout.render(job))
 
 
 class S3Session(SinkSession):

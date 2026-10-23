@@ -17,7 +17,7 @@
       "sink": {
         "class": "patient_access.destinations.s3.S3Sink",
         "options": {
-          "bucket": "patient-access", "prefix": "pulls", "endpoint_url": "${PA_S3_ENDPOINT}",
+          "bucket": "patient-access", "layout": "pulls/{participant.ref}/{job.id}", "endpoint_url": "${PA_S3_ENDPOINT}",
           "access_key": "${PA_S3_ACCESS_KEY}", "secret_key": "${PA_S3_SECRET_KEY}", "create_bucket": true
         }
       }

@@ -8,28 +8,24 @@ Not encrypted: it stands in for a destination, and destinations own their at-res
 from __future__ import annotations
 
 import json
-import re
 import shutil
 from pathlib import Path
 
 from patient_access.core.interfaces import Sink, SinkSession, SpoolHandle
 from patient_access.core.models import Job, Receipt, Unit, UnitOutcome
 
-_SAFE = re.compile(r"[^A-Za-z0-9._-]")
-
-
-def safe(part: str) -> str:
-    return _SAFE.sub("_", part)[:128] or "_"
+from .layout import KeyLayout, safe
 
 
 class LocalDirectorySink(Sink):
     accepts = frozenset({"document", "batch", "collection", "metadata"})
 
-    def __init__(self, root: str):
+    def __init__(self, root: str, layout: str = KeyLayout.DEFAULT):
         self.root = Path(root)
+        self.layout = KeyLayout(layout)
 
     def begin(self, job: Job) -> LocalDirectorySession:
-        return LocalDirectorySession(self.root / "pulls" / safe(job.participant.ref) / safe(job.id), job)
+        return LocalDirectorySession(self.root / self.layout.render(job), job)
 
 
 class LocalDirectorySession(SinkSession):
