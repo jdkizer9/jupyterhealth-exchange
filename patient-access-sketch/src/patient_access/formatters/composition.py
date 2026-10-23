@@ -164,6 +164,7 @@ class CompositionBundleFormatter(Formatter):
                 "link_id": job.participant.handle or None,
             },
             "source": {
+                "id": job.source.id,
                 "brand": job.source.brand_name,
                 "location": job.source.location_name,
                 "iss": job.source.iss,

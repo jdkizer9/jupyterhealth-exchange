@@ -61,6 +61,7 @@ def _location(loc: EhrBrandLocation) -> m.Location:
         brand_id=str(loc.brand_id),
         brand_name=loc.brand.name,
         iss=loc.brand.fhir_base_url,
+        brand_npi=loc.brand.npi_type_2 or None,
         vendor=loc.brand.vendor.name,
     )
 

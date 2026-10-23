@@ -4,8 +4,9 @@
     "{attrs[study]}/{participant.ref}/{created_at:%Y}/{created_at:%m}/{job.id}"
 
 Available roots: `participant` (ref, provider), `attrs` (whatever the identity provider put in
-Participant.attrs, e.g. the deep link's `attrs` claim), `job` (id), `source` (vendor, brand_name,
-location_id, ehr_patient_id), `created_at` (datetime). Each `/`-separated segment is rendered and
+Participant.attrs, e.g. the deep link's `attrs` claim), `job` (id), `source` (`id`: a stable,
+path-safe health-system identifier, NPI-based when known; also vendor, brand_name, location_id,
+ehr_patient_id), `created_at` (datetime). Each `/`-separated segment is rendered and
 sanitised on its own, so no value can add or escape a prefix. Unknown roots fail at
 configuration time; a missing attribute fails the pull before anything is written.
 """

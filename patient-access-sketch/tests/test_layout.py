@@ -23,6 +23,15 @@ def test_default_and_attrs_and_dates():
     assert layout.render(_job(attrs={"study": "bp"})) == "bp/epic/P-1/2026/10/j1"
 
 
+def test_source_id_is_stable_and_prefers_npi():
+    job = _job()
+    hashed = KeyLayout("{source.id}/{participant.ref}").render(job)
+    assert hashed.startswith("epic-") and len(hashed.split("/")[0]) == len("epic-") + 12
+    assert KeyLayout("{source.id}").render(_job()) == hashed.split("/")[0]  # same iss, same id
+    job.source.brand_npi = "1234567890"
+    assert KeyLayout("{source.id}").render(job) == "npi-1234567890"
+
+
 def test_values_cannot_escape_their_segment():
     assert KeyLayout().render(_job(ref="../../etc/{job.id}")) == "pulls/.._.._etc__job.id_/j1"
     assert KeyLayout("{participant.ref}").render(_job(ref="..")) == "_"

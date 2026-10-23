@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -89,6 +90,7 @@ class Location:
     brand_name: str
     iss: str
     vendor: str
+    brand_npi: str | None = None  # NPI type 2 from the Brands Bundle, when the vendor publishes one
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,17 @@ class Source:
     scopes_requested: list[str]
     scopes_granted: list[str]
     ehr_patient_id: str
+    brand_id: str = ""
+    brand_npi: str | None = None
+
+    @property
+    def id(self) -> str:
+        """A stable, path-safe identifier for the health system, for key layouts and metadata: the
+        brand's NPI when the directory has one, else the vendor plus a hash of the FHIR base URL."""
+        if self.brand_npi:
+            return f"npi-{self.brand_npi}"
+        digest = hashlib.sha256(self.iss.rstrip("/").encode()).hexdigest()[:12]
+        return f"{self.vendor}-{digest}"
 
 
 @dataclass

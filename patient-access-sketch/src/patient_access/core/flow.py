@@ -100,6 +100,8 @@ def finish_upstream_auth(
             scopes_requested=attempt.scopes,
             scopes_granted=token.scopes_granted,
             ehr_patient_id=token.patient,
+            brand_id=location.brand_id,
+            brand_npi=location.brand_npi,
         ),
         destination=attempt.destination,
         credentials=Secrets({EHR_TOKEN: token.access_token}),
