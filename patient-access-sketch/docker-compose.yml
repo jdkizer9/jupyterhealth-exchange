@@ -117,7 +117,7 @@ services:
     image: patient-access-sketch:local
     pull_policy: never
     # The DbPollingDispatcher's worker side: poll, claim, run_job, sweep.
-    command: ["python", "manage.py", "run_jobs"]
+    command: ["python", "manage.py", "run_jobs", "--heartbeat-file", "/tmp/pa-worker-heartbeat"]
     environment:
       <<: *pa-environment
     volumes:
@@ -127,6 +127,14 @@ services:
         condition: service_healthy # web runs the migrations
       s3:
         condition: service_healthy
+    healthcheck:
+      # The poll loop touches the file on every healthy iteration; a dead or stuck loop shows as
+      # unhealthy even though the process (or the dev reloader around it) is still running.
+      test: ["CMD-SHELL", "test -n \"$(find /tmp/pa-worker-heartbeat -mmin -1 2>/dev/null)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
 volumes:

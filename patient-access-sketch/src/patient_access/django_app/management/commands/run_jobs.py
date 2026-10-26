@@ -2,6 +2,7 @@
 
 import signal
 import threading
+from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -18,6 +19,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true", help="Run every runnable job, then exit (cron).")
         parser.add_argument("--noreload", action="store_true", help="With DEBUG, don't restart on code changes.")
+        parser.add_argument("--heartbeat-file", help="Touched on every healthy poll, for a container healthcheck.")
 
     def handle(self, *args, **options):
         if settings.DEBUG and not options["once"] and not options["noreload"]:
@@ -45,4 +47,17 @@ class Command(BaseCommand):
         if threading.current_thread() is threading.main_thread():  # under the dev reloader it is not
             signal.signal(signal.SIGTERM, stop)
             signal.signal(signal.SIGINT, stop)
-        poll_forever(dispatcher, module.claimer, module.run, module.spool, should_stop=lambda: stopping["flag"])
+        heartbeat_file = Path(options["heartbeat_file"]) if options.get("heartbeat_file") else None
+
+        def heartbeat() -> None:
+            if heartbeat_file:
+                heartbeat_file.touch()
+
+        poll_forever(
+            dispatcher,
+            module.claimer,
+            module.run,
+            module.spool,
+            should_stop=lambda: stopping["flag"],
+            heartbeat=heartbeat,
+        )

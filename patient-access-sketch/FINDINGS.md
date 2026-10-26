@@ -366,3 +366,26 @@ fetched 2,121 resources and delivered them to Silo. 10.5 s, same as the polling 
    the module is imported, so the broker URL comes from the environment, not the plug's options,
    and the runner is registered from the host's worker entry. The module also can't be named
    `dramatiq.py` inside `dispatch/` without shadowing the library.
+
+## Post-sketch: a database restart killed the polling worker silently (2026-10-26)
+
+Found during a walkthrough three days after the last run: a job sat `queued` with "waiting for a
+worker". Postgres had gone through crash recovery (the host slept; `database system was not
+properly shut down`), the worker's claim query raised, the poll loop thread died, and the
+container stayed "Up" because Django's dev reloader kept the main thread alive. The web process
+reconnects per request, so only the worker was affected, and nothing reported it.
+
+Fixed: the loop catches infrastructure failures around claim and sweep, logs, backs off
+(2 s, 4 s, ... up to 60 s) and keeps polling; it calls a `heartbeat` on every healthy iteration;
+`run_jobs --heartbeat-file` touches a file the compose healthcheck watches, so a dead or stuck loop
+shows as unhealthy even while the process runs. Unit-tested with a claimer that fails like a
+database in recovery.
+
+1. **"The row is the queue" needs a live poller, and nothing checked that it was alive.** Any
+   worker-side entry point (polling, Dramatiq, cron) needs a liveness signal the host can act on;
+   with Dramatiq the broker's own health is not the worker's.
+2. **A loop that owns the process must never let an infrastructure exception escape**, and a
+   dev reloader can mask exactly that. Production runs without the reloader, where the process
+   would at least have exited and been restarted; the healthcheck covers both.
+3. Compose does not restart unhealthy containers by itself; a real host (ECS, Kubernetes, Fly)
+   does, which is why the healthcheck is the right primitive.

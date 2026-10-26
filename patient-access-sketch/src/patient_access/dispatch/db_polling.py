@@ -80,15 +80,29 @@ def poll_forever(
     run: Callable[[JobId], Any],
     spool: Spool,
     should_stop: Callable[[], bool] = lambda: False,
+    heartbeat: Callable[[], None] = lambda: None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> None:
+    """The loop never dies: a failing claim or sweep (database down, in recovery) is logged and
+    retried with backoff, and `heartbeat` runs on every healthy iteration so a host healthcheck
+    can tell a stalled worker from a quiet one."""
     wid = worker_id()
     polls = 0
+    failures = 0
     log.info("worker %s polling every %ss", wid, dispatcher.interval)
-    sweep(claimer, spool, dispatcher.spool_max_age)
     while not should_stop():
-        ran = poll_once(claimer, run, dispatcher.lease, wid)
+        try:
+            if polls % dispatcher.sweep_every == 0:
+                sweep(claimer, spool, dispatcher.spool_max_age)
+            ran = poll_once(claimer, run, dispatcher.lease, wid)
+        except Exception:  # noqa: BLE001 - the infrastructure, not a job, failed
+            failures += 1
+            delay = min(60.0, dispatcher.interval * 2**failures)
+            log.exception("worker %s: poll failed (%d in a row); retrying in %.0fs", wid, failures, delay)
+            sleep(delay)
+            continue
+        failures = 0
         polls += 1
-        if polls % dispatcher.sweep_every == 0:
-            sweep(claimer, spool, dispatcher.spool_max_age)
+        heartbeat()
         if ran is None:
-            time.sleep(dispatcher.interval)
+            sleep(dispatcher.interval)
