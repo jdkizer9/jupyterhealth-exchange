@@ -10,6 +10,7 @@ this is `JobDispatcher.dispatch` plus the host's existing `run`.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import threading
 from collections.abc import Callable
@@ -43,6 +44,21 @@ class ThreadDispatcher(JobDispatcher):
         self.lease = timedelta(seconds=lease_seconds)
         self.on_thread_exit = on_thread_exit
         self.thread_factory = thread_factory
+        self._active: dict[JobId, str] = {}
+        self._lock = threading.Lock()
+        # Daemon threads are killed when the process exits (a deploy); releasing their leases
+        # first lets the sweep resume those jobs on its next tick instead of after the lease expires.
+        atexit.register(self.release_all)
+
+    def release_all(self) -> None:
+        with self._lock:
+            active = dict(self._active)
+            self._active.clear()
+        for job_id, wid in active.items():
+            try:
+                self.claimer.release(job_id, wid)
+            except Exception:  # noqa: BLE001 - best effort at shutdown
+                log.exception("job %s: lease release at exit failed", job_id)
 
     def dispatch(self, job_id: JobId) -> None:
         t = self.thread_factory(target=self._work, args=(job_id,), name=f"pa-job-{job_id[:8]}", daemon=True)
@@ -54,11 +70,15 @@ class ThreadDispatcher(JobDispatcher):
             if not self.claimer.claim(job_id, wid, self.lease):
                 log.info("job %s: not claimed by thread (already leased or terminal)", job_id)
                 return
+            with self._lock:
+                self._active[job_id] = wid
             try:
                 self.run(job_id)
             except Exception:  # noqa: BLE001 - run_job records failures; the sweep retries
                 log.exception("job %s: thread run failed", job_id)
             finally:
+                with self._lock:
+                    self._active.pop(job_id, None)
                 self.claimer.release(job_id, wid)
         finally:
             self.on_thread_exit()

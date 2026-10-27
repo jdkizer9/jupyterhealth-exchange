@@ -78,6 +78,8 @@ def run_job(job_id: JobId, deps: Deps) -> Job:
     deps.jobs.save(job)
 
     try:
+        if job.attempts > 1 and not _spool_intact(job, handle, deps):
+            return job
         if job.status in (JobStatus.QUEUED, JobStatus.FETCHING):
             _fetch(job, handle, deps)
         if job.status in (JobStatus.FETCHED, JobStatus.DELIVERING, JobStatus.FAILED):
@@ -85,6 +87,38 @@ def run_job(job_id: JobId, deps: Deps) -> Job:
     finally:
         handle.close()
     return job
+
+
+def _spool_intact(job: Job, handle: SpoolHandle, deps: Deps) -> bool:
+    """On resume, never trust the row's "ok" marks over the spool itself: a process or machine
+    that died (or was redeployed) may have taken a local-disk spool with it. A type whose spool
+    count disagrees with its outcomes is refetched if the token is still live; if the fetch had
+    already finished and the token is gone, the job fails honestly rather than delivering a
+    silently incomplete pull."""
+    expected: dict[str, int] = {}
+    for o in job.outcomes:
+        if o.status == "ok":
+            expected[o.resource_type] = expected.get(o.resource_type, 0) + o.count
+    actual = handle.index().types
+    lost = [t for t, n in expected.items() if n and actual.get(t, 0) != n]
+    if not lost:
+        return True
+    if job.status in (JobStatus.QUEUED, JobStatus.FETCHING):
+        log.warning("job %s: spool lost for %s; refetching", job.id, lost)
+        for o in job.outcomes:
+            if o.resource_type in lost:
+                o.status, o.count, o.pages, o.bytes = "pending", 0, 0, 0
+        for t in lost:
+            handle.reset_type(t)
+        deps.jobs.save(job)
+        return True
+    _fail_terminal(
+        job,
+        deps,
+        "The downloaded records were lost before they could be delivered (the service restarted). "
+        "Please connect again.",
+    )
+    return False
 
 
 def _fetch(job: Job, handle: SpoolHandle, deps: Deps) -> None:

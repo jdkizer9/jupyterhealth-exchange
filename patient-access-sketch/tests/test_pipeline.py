@@ -134,3 +134,37 @@ def test_destination_pairing_checked_at_construction():
 
     with pytest.raises(ConfigError):
         Destination("bad", PassthroughFormatter(), OnlyBatch())
+
+
+def test_lost_spool_during_fetch_is_refetched():
+    calls = {"fetch": 0}
+
+    def counting_fetch(*a):
+        calls["fetch"] += 1
+        fake_fetch(*a)
+
+    deps, jobs, spool, sink = make(fetch=counting_fetch)
+    # First attempt: fetch finished, then the process died before delivery began...
+    job = jobs.get("j1")
+    job.attempts = 1
+    job.status = JobStatus.FETCHING
+    job.outcomes = [TypeOutcome("Conditions", "Condition", "Condition", status="ok", count=3)]
+    job.credentials[SPOOL_KEY] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    jobs.save(job)
+    # ...and the machine was replaced: the spool is empty but the row says Conditions are done.
+    job = run_job("j1", deps)
+    assert job.status == JobStatus.DONE and calls["fetch"] == 1 and job.receipt.resources == 3
+
+
+def test_lost_spool_after_fetch_fails_honestly():
+    deps, jobs, spool, sink = make()
+    job = jobs.get("j1")
+    job.attempts = 1
+    job.status = JobStatus.FETCHED
+    job.credentials.pop(EHR_TOKEN)  # dropped at the end of the fetch, as always
+    job.credentials[SPOOL_KEY] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    job.outcomes = [TypeOutcome("Conditions", "Condition", "Condition", status="ok", count=3)]
+    jobs.save(job)
+    job = run_job("j1", deps)
+    assert job.status == JobStatus.FAILED_TERMINAL and "connect again" in job.failure
+    assert sink.delivered == {}  # nothing incomplete went out

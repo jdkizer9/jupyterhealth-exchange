@@ -48,3 +48,21 @@ def test_skips_when_already_leased_and_survives_run_errors():
     claimer = Claimer()
     _run_sync(run=boom, claimer=claimer).dispatch("job-3")  # must not raise
     assert claimer.released == [("job-3", claimer.claimed[0][1])]
+
+
+def test_release_all_frees_leases_held_by_running_threads():
+    import threading as th
+
+    claimer = Claimer()
+    started, finish = th.Event(), th.Event()
+
+    def slow(job_id):
+        started.set()
+        finish.wait(5)
+
+    d = ThreadDispatcher(run=slow, claimer=claimer)
+    d.dispatch("job-9")
+    assert started.wait(5)
+    d.release_all()  # what atexit does on a deploy
+    assert claimer.released == [("job-9", claimer.claimed[0][1])]
+    finish.set()
