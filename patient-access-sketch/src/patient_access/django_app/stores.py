@@ -249,7 +249,9 @@ class OrmJobClaimer(JobClaimer):
 
     def claim_next(self, worker_id: str, lease: timedelta) -> m.JobId | None:
         now = timezone.now()
-        runnable = Q(status__in=["queued", "fetched"]) | Q(
+        # A non-terminal job with no lease is runnable: queued ones have never run, and fetching /
+        # delivering ones with no lease were abandoned by a process that released at exit.
+        runnable = Q(status__in=["queued", "fetching", "fetched", "delivering"]) | Q(
             status="failed", attempts__lt=self.max_attempts, updated_at__lt=now - self.RETRY_AFTER
         )
         # A stale lease means a worker died mid-run; its job is resumable by phase.

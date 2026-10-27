@@ -50,6 +50,17 @@ def test_claimer_leases_once_and_reclaims_stale():
     assert JobRecord.objects.get(id=job_id).lease_owner == "w2"
 
 
+def test_abandoned_mid_phase_job_with_released_lease_is_claimable():
+    store, claimer = OrmJobStore(), OrmJobClaimer()
+    job_id = store.create(_job())
+    assert claimer.claim_next("w1", timedelta(minutes=10)) == job_id
+    job = store.get(job_id)
+    job.status = JobStatus.FETCHING
+    store.save(job)
+    claimer.release(job_id, "w1")  # a deploy: the thread's lease released at process exit
+    assert claimer.claim_next("w2", timedelta(minutes=10)) == job_id
+
+
 def test_save_does_not_touch_the_lease():
     store, claimer = OrmJobStore(), OrmJobClaimer()
     job_id = store.create(_job())

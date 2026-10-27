@@ -394,9 +394,11 @@ database in recovery.
 
 Setup: web on `ThreadDispatcher`, worker container stopped. A pull was started and the web
 container restarted after 6 of 18 query rows had finished, standing in for a deploy. The thread's
-lease was released at exit; `run_jobs --once` (the cron form) then resumed the job on its second
-attempt and delivered all 2,121 resources. The spool survived here because it is a bind mount;
-on Fly it would not, which is what the new resume check is for.
+lease was released at exit. The first cron tick refused to run (finding 1); the second ran as the
+sweep but did not pick the job up (finding 4); the third resumed it and delivered all 2,121
+resources. The spool survived here because it is a bind mount; on Fly it would not, which is what
+the resume check in finding 2 is for. Three bugs from one rehearsal, none visible to the unit
+tests with in-memory plugs.
 
 1. **`run_jobs` refused to be the sweep under a non-polling dispatcher.** It checked for the
    polling dispatcher and errored under `ThreadDispatcher`, contradicting "the sweep is independent
@@ -407,3 +409,8 @@ on Fly it would not, which is what the new resume check is for.
 3. **Leases are released at process exit** (`atexit` in `ThreadDispatcher`), so the sweep resumes on
    its next tick rather than after the 10-minute lease. Under Django's dev reloader the release is
    racy (the reloader parent is killed first); under gunicorn's graceful stop it runs normally.
+4. **A job abandoned mid-phase with its lease released was invisible to the claim query**, which
+   only looked for `queued`/`fetched`, retryable `failed`, or stale leases. Releasing at exit
+   (finding 3) therefore made recovery *worse* until the query treated any non-terminal, leaseless
+   job as runnable. The two fixes only work together; the sweep and the lease semantics are one
+   design, not two features.
