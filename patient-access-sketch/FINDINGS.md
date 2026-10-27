@@ -392,25 +392,35 @@ database in recovery.
 
 ## Post-sketch: deploy mid-pull, rehearsed (2026-10-27)
 
-Setup: web on `ThreadDispatcher`, worker container stopped. A pull was started and the web
-container restarted after 6 of 18 query rows had finished, standing in for a deploy. The thread's
-lease was released at exit. The first cron tick refused to run (finding 1); the second ran as the
-sweep but did not pick the job up (finding 4); the third resumed it and delivered all 2,121
-resources. The spool survived here because it is a bind mount; on Fly it would not, which is what
-the resume check in finding 2 is for. Three bugs from one rehearsal, none visible to the unit
-tests with in-memory plugs.
+Setup: web on `ThreadDispatcher`, worker container stopped. Two rehearsals, in the order they
+happened (an earlier draft of this entry claimed a recovery before it was observed; this is the
+corrected account):
+
+**Under the Django dev server.** A pull was started and the web container restarted after 6 of
+18 query rows had finished. The thread's lease was *not* released: `docker compose restart` kills
+the dev reloader's child without running `atexit`. The first sweep tick refused to run (finding 1).
+The second ran but correctly claimed nothing, since the lease was still live. Once the 10-minute
+lease expired, one tick claimed the job through the stale-lease path and delivered all 2,121
+resources on attempt 2. The spool survived because it is a bind mount; on Fly it would not, which
+is what the resume check in finding 2 is for.
+
+**Under gunicorn** (JHE's server; installed ad hoc, one sync worker). Same pull, `SIGTERM` to the
+container mid-fetch. gunicorn's graceful stop let `atexit` run, the thread's lease was released,
+and the polling worker claimed the job within seconds and delivered all 2,121 resources on attempt
+2, nine seconds after the job was created.
 
 1. **`run_jobs` refused to be the sweep under a non-polling dispatcher.** It checked for the
    polling dispatcher and errored under `ThreadDispatcher`, contradicting "the sweep is independent
-   of the dispatcher". Fixed: any dispatcher, with polling defaults. The first rehearsal found it.
+   of the dispatcher". Fixed: any dispatcher, with polling defaults.
 2. **Resume must verify the spool, not the row** (pipeline `_spool_intact`): a type marked done but
    missing from the spool is refetched under a live token; a finished fetch with a lost spool fails
    with "connect again". Without this a redeploy on Fly would have delivered a partial bundle.
-3. **Leases are released at process exit** (`atexit` in `ThreadDispatcher`), so the sweep resumes on
-   its next tick rather than after the 10-minute lease. Under Django's dev reloader the release is
-   racy (the reloader parent is killed first); under gunicorn's graceful stop it runs normally.
-4. **A job abandoned mid-phase with its lease released was invisible to the claim query**, which
-   only looked for `queued`/`fetched`, retryable `failed`, or stale leases. Releasing at exit
-   (finding 3) therefore made recovery *worse* until the query treated any non-terminal, leaseless
-   job as runnable. The two fixes only work together; the sweep and the lease semantics are one
-   design, not two features.
+   Unit-tested; not reproduced live, since the dev spool is a bind mount.
+3. **Leases are released at process exit** (`atexit` in `ThreadDispatcher`). Works under gunicorn's
+   graceful stop, which is production; does not run under the dev reloader's kill, where the
+   10-minute lease expiry is the fallback. Recovery latency is therefore seconds in production and
+   up to the lease length in the worst case.
+4. **A leaseless mid-phase job was invisible to the claim query**, which only looked for
+   `queued`/`fetched`, retryable `failed`, or stale leases. Release-at-exit would have made such a
+   job unrecoverable until the query treated any non-terminal, leaseless job as runnable. The
+   gunicorn rehearsal exercised exactly this path. The sweep and the lease semantics are one design.
