@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.utils import autoreload
 
 from patient_access.dispatch.db_polling import DbPollingDispatcher, poll_forever, poll_once, sweep, worker_id
@@ -32,7 +32,11 @@ class Command(BaseCommand):
         module = get_module()
         dispatcher = module.dispatcher
         if not isinstance(dispatcher, DbPollingDispatcher):
-            raise CommandError(f"run_jobs is the DbPollingDispatcher worker; configured: {type(dispatcher).__name__}")
+            # The sweep is independent of how jobs are normally dispatched (design §7.2): under a
+            # thread or broker dispatcher this command is still what recovers dropped jobs and
+            # orphaned spools, with the polling defaults for lease and sweep age.
+            self.stderr.write(f"configured dispatcher is {type(dispatcher).__name__}; running as the sweep")
+            dispatcher = DbPollingDispatcher()
         if options["once"]:
             wid = worker_id()
             while poll_once(module.claimer, module.run, dispatcher.lease, wid):

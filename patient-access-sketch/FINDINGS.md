@@ -389,3 +389,21 @@ database in recovery.
    would at least have exited and been restarted; the healthcheck covers both.
 3. Compose does not restart unhealthy containers by itself; a real host (ECS, Kubernetes, Fly)
    does, which is why the healthcheck is the right primitive.
+
+## Post-sketch: deploy mid-pull, rehearsed (2026-10-27)
+
+Setup: web on `ThreadDispatcher`, worker container stopped. A pull was started and the web
+container restarted after 6 of 18 query rows had finished, standing in for a deploy. The thread's
+lease was released at exit; `run_jobs --once` (the cron form) then resumed the job on its second
+attempt and delivered all 2,121 resources. The spool survived here because it is a bind mount;
+on Fly it would not, which is what the new resume check is for.
+
+1. **`run_jobs` refused to be the sweep under a non-polling dispatcher.** It checked for the
+   polling dispatcher and errored under `ThreadDispatcher`, contradicting "the sweep is independent
+   of the dispatcher". Fixed: any dispatcher, with polling defaults. The first rehearsal found it.
+2. **Resume must verify the spool, not the row** (pipeline `_spool_intact`): a type marked done but
+   missing from the spool is refetched under a live token; a finished fetch with a lost spool fails
+   with "connect again". Without this a redeploy on Fly would have delivered a partial bundle.
+3. **Leases are released at process exit** (`atexit` in `ThreadDispatcher`), so the sweep resumes on
+   its next tick rather than after the 10-minute lease. Under Django's dev reloader the release is
+   racy (the reloader parent is killed first); under gunicorn's graceful stop it runs normally.
