@@ -39,6 +39,13 @@ from .stores import OrmAuthAttemptStore, OrmDeepLinkStore, OrmDirectory, OrmJobC
 _VAR = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
 
+def _close_db_connection() -> None:
+    """Django opens one DB connection per thread; a dispatcher thread must close its own."""
+    from django.db import connection
+
+    connection.close()
+
+
 def _subst(value: Any) -> Any:
     if isinstance(value, str):
         return _VAR.sub(lambda mt: os.environ[mt.group(1)], value)
@@ -137,5 +144,7 @@ def get_module() -> Module:
         http=http_session(),
     )
     services["run"] = module.run
+    services["claimer"] = module.claimer
+    services["on_thread_exit"] = _close_db_connection
     module.dispatcher = build(config["dispatcher"], services)
     return module
