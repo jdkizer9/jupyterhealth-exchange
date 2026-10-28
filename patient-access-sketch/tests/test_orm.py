@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from patient_access.core.models import Job, JobStatus, Participant, Receipt, Secrets, Source, TypeOutcome
-from patient_access.django_app.models import JobRecord
-from patient_access.django_app.stores import OrmJobClaimer, OrmJobStore
+from patient_access.django_apps.jobs.models import JobRecord
+from patient_access.django_apps.jobs.stores import OrmJobClaimer, OrmJobStore
 
 pytestmark = pytest.mark.django_db
 

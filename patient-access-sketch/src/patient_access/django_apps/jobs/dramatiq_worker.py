@@ -1,4 +1,4 @@
-"""Worker-side entry for DramatiqDispatcher: `dramatiq patient_access.django_app.dramatiq_worker`.
+"""Worker-side entry for DramatiqDispatcher: `dramatiq patient_access.django_apps.jobs.dramatiq_worker`.
 
 Sets up Django, builds the module, and hands its `run` to the actor. Each job is claimed through
 the same lease the polling worker uses, so a duplicate message (or a polling worker running beside

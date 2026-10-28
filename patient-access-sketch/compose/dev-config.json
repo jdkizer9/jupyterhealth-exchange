@@ -3,9 +3,11 @@
     "class": "patient_access.identity.jwt_deeplink.JwtDeepLinkIdentity",
     "options": {
       "issuers": {"study-dev": "/code/compose/dev-keys/deeplink-study-dev.pub.pem"},
+      "deeplink_store": {"class": "patient_access.django_apps.deeplink.stores.OrmDeepLinkStore"},
       "mint": {"iss": "study-dev", "private_key": "/code/compose/dev-keys/deeplink-study-dev.pem"}
     }
   },
+  "directory": {"class": "patient_access.django_apps.directory.stores.OrmDirectory"},
   "spool": {"class": "patient_access.spool.local_disk.LocalDiskSpool", "options": {"root": "${PA_SPOOL_DIR}"}},
   "destinations": {
     "local": {

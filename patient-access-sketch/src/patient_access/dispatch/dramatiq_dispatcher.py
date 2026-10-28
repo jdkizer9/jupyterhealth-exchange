@@ -1,7 +1,7 @@
 """DramatiqDispatcher: the same JobDispatcher seam, backed by a Redis broker (plan §5 stretch).
 
 Web side: `dispatch(job_id)` sends a message carrying only the id. Worker side: the host runs
-    dramatiq patient_access.django_app.dramatiq_worker
+    dramatiq patient_access.django_apps.jobs.dramatiq_worker
 which builds the module and registers `run` here, so the actor calls run_job without this module
 importing Django. The Job row stays the system of record (design §7.2): the message is only a
 nudge, and a lost one is recovered by re-dispatching queued jobs, never by replaying the queue.
@@ -40,7 +40,7 @@ def run_job_actor(job_id: str) -> None:
     # No broker retries: run_job records failures on the row and is resumable; retrying is the
     # row's business (status `failed`), not the broker's.
     if _runner is None:
-        raise RuntimeError("no runner registered; start the worker via patient_access.django_app.dramatiq_worker")
+        raise RuntimeError("no runner registered; start the worker via patient_access.django_apps.jobs.dramatiq_worker")
     _runner(job_id)
 
 

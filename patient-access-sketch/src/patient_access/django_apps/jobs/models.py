@@ -1,4 +1,4 @@
-"""The module's tables. Rows are translated to core dataclasses in stores.py; nothing else reads them."""
+"""The tables every Django host needs: auth attempts and jobs. Rows become core dataclasses in stores.py."""
 
 import uuid
 
@@ -7,63 +7,6 @@ from django.db import models
 
 def _uuid() -> str:
     return uuid.uuid4().hex
-
-
-# --- directory (moved from JHE's core/models/ehr_brand.py; same shape) ------------------------
-
-
-class EhrVendor(models.Model):
-    """A vendor key into the deployment's VendorConfig (client id, auth method, query table live there)."""
-
-    name = models.CharField(unique=True)
-    last_updated = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-
-class EhrBrand(models.Model):
-    name = models.CharField()
-    vendor = models.ForeignKey(EhrVendor, on_delete=models.PROTECT, related_name="brands")
-    fhir_base_url = models.TextField(unique=True)  # the SMART iss
-    npi_type_2 = models.CharField(null=True, blank=True)
-    last_updated = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-
-class EhrBrandLocation(models.Model):
-    brand = models.ForeignKey(EhrBrand, on_delete=models.CASCADE, related_name="locations")
-    name = models.CharField()
-    address_text = models.TextField(blank=True, default="")
-    city = models.CharField(null=True, blank=True)
-    state = models.CharField(null=True, blank=True)
-    postal_code = models.CharField(null=True, blank=True)
-    country = models.CharField(null=True, blank=True)
-    last_updated = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["state"]),
-            models.Index(fields=["postal_code"]),
-            models.Index(fields=["name"]),
-        ]
-
-    def __str__(self):
-        return self.name
-
-
-# --- identity plug storage --------------------------------------------------------------------
-
-
-class ConsumedDeepLink(models.Model):
-    """JwtDeepLinkIdentity's DeepLinkStore: a jti is inserted when its link creates a job."""
-
-    jti = models.CharField(primary_key=True)
-    ref = models.CharField()
-    exp = models.DateTimeField()
-    used_at = models.DateTimeField(auto_now_add=True)
 
 
 # --- phase 3 ----------------------------------------------------------------------------------

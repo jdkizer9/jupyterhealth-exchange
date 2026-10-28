@@ -5,9 +5,8 @@ import json
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from patient_access.django_apps.jobs.wiring import get_module
 from patient_access.identity.jwt_deeplink import JwtDeepLinkIdentity, mint_link, parse_ttl
-
-from ...wiring import get_module
 
 
 class Command(BaseCommand):

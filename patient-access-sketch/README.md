@@ -31,6 +31,7 @@ Every value in the compose files and `compose/` is a public, local-only dev valu
 
 `src/patient_access/` is the library. `core/` has no Django and no boto3. The plugs live in
 `identity/`, `formatters/`, `destinations/`, `spool/` and `dispatch/`, and `testing/` holds
-in-memory versions of everything. `django_app/` is the only Django code. `server/` is the minimal
-standalone host. `compose/dev-config*.json` are deployment configs (plugs, options, vendors,
+in-memory versions of everything. `django_apps/` is the only Django code, split into separately
+installable apps (`jobs` required; `directory`, `deeplink`, `portal` optional) so a host installs
+only the tables it uses. `server/` is the minimal standalone host, which installs all four. `compose/dev-config*.json` are deployment configs (plugs, options, vendors,
 query tables); variants `extend` the base.

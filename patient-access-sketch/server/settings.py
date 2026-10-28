@@ -25,7 +25,12 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.staticfiles",
-    "patient_access.django_app",
+    # The standalone server uses every plug, so it installs every app; a host like JHE installs
+    # only `jobs` (see patient_access/django_apps/__init__.py).
+    "patient_access.django_apps.jobs",
+    "patient_access.django_apps.directory",
+    "patient_access.django_apps.deeplink",
+    "patient_access.django_apps.portal",
 ]
 
 MIDDLEWARE = [

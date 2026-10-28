@@ -1,4 +1,4 @@
-"""ORM implementations of the core Protocols, plus the plug-owned stores and the polling claimer.
+"""ORM implementations of the attempt and job stores, plus the polling claimer.
 
 The edge where rows become dataclasses (design §9 rule 2).
 """
@@ -6,25 +6,18 @@ The edge where rows become dataclasses (design §9 rule 2).
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from patient_access.core import models as m
-from patient_access.core.interfaces import AuthAttemptStore, Directory, JobStore
+from patient_access.core.interfaces import AuthAttemptStore, JobStore
 from patient_access.dispatch.db_polling import JobClaimer
-from patient_access.identity.jwt_deeplink import DeepLinkStore
 
 from .crypto import decrypt_secrets, decrypt_str, encrypt_secrets, encrypt_str
-from .models import (
-    AuthAttemptRecord,
-    ConsumedDeepLink,
-    EhrBrandLocation,
-    EhrVendor,
-    JobRecord,
-)
+from .models import AuthAttemptRecord, JobRecord
 
 # --- serde ------------------------------------------------------------------------------------
 
@@ -45,68 +38,6 @@ def participant_from_json(d: dict, secrets_enc: str) -> m.Participant:
 
 def _receipt_from_json(d: dict | None) -> m.Receipt | None:
     return m.Receipt(**d) if d else None
-
-
-# --- directory --------------------------------------------------------------------------------
-
-
-def _location(loc: EhrBrandLocation) -> m.Location:
-    return m.Location(
-        id=str(loc.id),
-        name=loc.name,
-        address=loc.address_text,
-        city=loc.city,
-        state=loc.state,
-        postal_code=loc.postal_code,
-        brand_id=str(loc.brand_id),
-        brand_name=loc.brand.name,
-        iss=loc.brand.fhir_base_url,
-        brand_npi=loc.brand.npi_type_2 or None,
-        vendor=loc.brand.vendor.name,
-    )
-
-
-class OrmDirectory(Directory):
-    def search(self, q: str, state: str | None = None, postal: str | None = None, limit: int = 25) -> list[m.Location]:
-        qs = EhrBrandLocation.objects.select_related("brand", "brand__vendor")
-        for word in (q or "").split():
-            qs = qs.filter(Q(name__icontains=word) | Q(brand__name__icontains=word) | Q(city__icontains=word))
-        if state:
-            qs = qs.filter(state__iexact=state)
-        if postal:
-            qs = qs.filter(postal_code__startswith=postal)
-        return [_location(loc) for loc in qs.order_by("name")[:limit]]
-
-    def location(self, location_id: str) -> m.Location:
-        try:
-            return _location(EhrBrandLocation.objects.select_related("brand", "brand__vendor").get(id=int(location_id)))
-        except (EhrBrandLocation.DoesNotExist, ValueError):
-            raise KeyError(location_id) from None
-
-    @transaction.atomic
-    def upsert_brands_bundle(self, bundle: dict, vendor: str) -> m.ImportCounts:
-        from .brands import import_brands_bundle
-
-        return import_brands_bundle(bundle, EhrVendor.objects.get_or_create(name=vendor)[0])
-
-
-# --- identity plug storage --------------------------------------------------------------------
-
-
-class OrmDeepLinkStore(DeepLinkStore):
-    def is_consumed(self, jti: str) -> bool:
-        return ConsumedDeepLink.objects.filter(jti=jti).exists()
-
-    def consume(self, jti: str, ref: str, exp: datetime) -> bool:
-        try:
-            with transaction.atomic():
-                ConsumedDeepLink.objects.create(jti=jti, ref=ref, exp=exp)
-        except IntegrityError:
-            return False
-        return True
-
-    def sweep(self, now: datetime) -> int:
-        return ConsumedDeepLink.objects.filter(exp__lt=now).delete()[0]
 
 
 # --- phase 3 ----------------------------------------------------------------------------------

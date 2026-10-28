@@ -10,10 +10,9 @@ from django.views.decorators.http import require_GET, require_POST
 from patient_access.core.flow import FlowError, finish_upstream_auth, start_upstream_auth
 from patient_access.core.interfaces import IdentityError
 from patient_access.core.models import InboundRequest, Participant
-
-from .crypto import encrypt_secrets
-from .stores import participant_from_json, participant_to_json
-from .wiring import get_module
+from patient_access.django_apps.jobs.crypto import encrypt_secrets
+from patient_access.django_apps.jobs.stores import participant_from_json, participant_to_json
+from patient_access.django_apps.jobs.wiring import get_module
 
 SESSION_KEY = "pa_participant"
 

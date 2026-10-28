@@ -8,5 +8,5 @@ Layers (design-sketch.md §9):
     spool/         Spool plugs
     dispatch/      JobDispatcher plugs
     testing/       in-memory implementations of every Protocol
-    django_app/    models, ORM stores, views, management commands (the only Django code)
+    django_apps/   jobs, directory, deeplink, portal: separately installable Django apps (the only Django code)
 """

@@ -54,7 +54,7 @@ django_settings_module = "server.settings"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = ["src/patient_access/django_app/migrations"]
+extend-exclude = ["src/patient_access/django_apps/*/migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
@@ -72,7 +72,7 @@ forbidden_modules = [
     "django",
     "boto3",
     "botocore",
-    "patient_access.django_app",
+    "patient_access.django_apps",
     "patient_access.destinations",
     "patient_access.formatters",
     "patient_access.identity",
@@ -91,7 +91,28 @@ source_modules = [
     "patient_access.spool",
     "patient_access.dispatch",
 ]
-forbidden_modules = ["django", "patient_access.django_app"]
+forbidden_modules = ["django", "patient_access.django_apps"]
+
+# A host installs only the apps it uses (django_apps/__init__.py): the required app must not
+# drag in an optional one, and the optional ones stand alone.
+[[tool.importlinter.contracts]]
+name = "the jobs app imports no optional app"
+type = "forbidden"
+source_modules = ["patient_access.django_apps.jobs"]
+forbidden_modules = [
+    "patient_access.django_apps.directory",
+    "patient_access.django_apps.deeplink",
+    "patient_access.django_apps.portal",
+]
+
+[[tool.importlinter.contracts]]
+name = "optional apps are independent of each other"
+type = "independence"
+modules = [
+    "patient_access.django_apps.directory",
+    "patient_access.django_apps.deeplink",
+    "patient_access.django_apps.portal",
+]
 
 [[tool.importlinter.contracts]]
 name = "boto3 only in the S3 modules"

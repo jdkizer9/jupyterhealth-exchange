@@ -1,8 +1,13 @@
 """Builds the plugs from the deployment config (settings.PATIENT_ACCESS_CONFIG, a JSON file).
 
-Each plug is {"class": "dotted.path", "options": {...}}. Strings may use ${ENV_VAR}. A constructor
-parameter not given in options is filled from `services` by name when one matches, which is how a
-plug receives a store the Django app implements (e.g. JwtDeepLinkIdentity's `store`).
+Each plug is {"class": "dotted.path", "options": {...}}. Strings may use ${ENV_VAR}. An option
+that is itself a plug spec is built first, which is how a plug receives a store from an optional
+app (JwtDeepLinkIdentity's `deeplink_store`) without this app importing it. A constructor
+parameter not given in options is filled from `services` by name when one matches (`run`,
+`claimer`, `vendors`, ...).
+
+The directory is a plug too, so a host with its own (JHE) names it here and never installs the
+module's directory app.
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ from patient_access.core.pipeline import Deps, Destination, run_job, utcnow
 from patient_access.core.puller import fetch
 from patient_access.core.vendors import VendorConfig, load_vendors
 
-from .stores import OrmAuthAttemptStore, OrmDeepLinkStore, OrmDirectory, OrmJobClaimer, OrmJobStore
+from .stores import OrmAuthAttemptStore, OrmJobClaimer, OrmJobStore
 
 _VAR = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
@@ -59,6 +64,9 @@ def _subst(value: Any) -> Any:
 def build(spec: dict, services: dict[str, Any]) -> Any:
     cls = import_string(spec["class"])
     options = _subst(spec.get("options") or {})
+    for name, value in options.items():
+        if isinstance(value, dict) and "class" in value:
+            options[name] = build(value, services)
     for name in inspect.signature(cls).parameters:
         if name not in options and name in services:
             options[name] = services[name]
@@ -87,15 +95,12 @@ class Module:
     deps: Deps
     claimer: OrmJobClaimer
     site_url: str
+    redirect_uri: str
     http: requests.Session
     clock: Callable[[], datetime] = field(default=utcnow)
 
     def run(self, job_id: str):
         return run_job(job_id, self.deps)
-
-    @property
-    def redirect_uri(self) -> str:
-        return f"{self.site_url}/callback"
 
 
 def load_config(path: str | None = None) -> dict:
@@ -110,10 +115,7 @@ def load_config(path: str | None = None) -> dict:
 @cache
 def get_module() -> Module:
     config = load_config()
-    services: dict[str, Any] = {
-        "deeplink_store": OrmDeepLinkStore(),
-        "site_url": settings.SITE_URL,
-    }
+    services: dict[str, Any] = {"site_url": settings.SITE_URL}
     vendors = load_vendors(_subst({"vendors": config.get("vendors"), "query_tables": config.get("query_tables")}))
     services["vendors"] = vendors
     destinations = {}
@@ -130,7 +132,7 @@ def get_module() -> Module:
     module = Module(
         config=config,
         identity=build(config["identity"], services),
-        directory=OrmDirectory(),
+        directory=build(config["directory"], services),
         auth_attempts=OrmAuthAttemptStore(),
         jobs=jobs,
         spool=spool,
@@ -141,6 +143,8 @@ def get_module() -> Module:
         deps=deps,
         claimer=OrmJobClaimer(max_attempts=max_attempts),
         site_url=settings.SITE_URL,
+        # Where the EHR sends the patient back; a host with a registered path of its own sets it.
+        redirect_uri=_subst(config.get("redirect_uri") or f"{settings.SITE_URL}/callback"),
         http=http_session(),
     )
     services["run"] = module.run

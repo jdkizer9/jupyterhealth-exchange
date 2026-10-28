@@ -8,11 +8,11 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
+from patient_access.django_apps.jobs.wiring import _subst, get_module, load_config
 from patient_access.testing.smart_sandbox import SandboxConfig, jwks_from_public_pem
 
 from ...brands import brands_bundle
 from ...models import EhrBrand
-from ...wiring import _subst, get_module, load_config
 
 
 class Command(BaseCommand):

@@ -1,4 +1,4 @@
-"""Dataclasses core speaks. No ORM instances cross into core; django_app translates at the edge."""
+"""Dataclasses core speaks. No ORM instances cross into core; django_apps translate at the edge."""
 
 from __future__ import annotations
 
