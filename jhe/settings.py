@@ -94,6 +94,9 @@ INSTALLED_APPS = [
     "oauth2_provider",
     "rest_framework",
     "drf_spectacular",
+    # Patient Access Module (sketch, scenario D): only its jobs app. JHE brings its own directory
+    # and identity, so the module's directory, deep-link and portal apps stay out.
+    "patient_access.django_apps.jobs",
 ]
 
 # Required for allauth

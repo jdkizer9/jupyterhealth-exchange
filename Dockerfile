@@ -33,6 +33,10 @@ RUN --mount=type=cache,target=${XDG_CACHE_DIR} \
 ARG TARGETARCH
 ADD --chmod=755 https://github.com/aptible/supercronic/releases/download/v0.2.29/supercronic-linux-${TARGETARCH} /usr/local/bin/supercronic
 
+# Sketch (scenario D): the Patient Access Module is imported in place from its sketch tree
+# rather than installed as a package.
+ENV PYTHONPATH=/code/patient-access-sketch/src
+
 COPY . /code
 RUN python manage.py collectstatic --no-input
 
