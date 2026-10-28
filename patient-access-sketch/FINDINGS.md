@@ -451,3 +451,65 @@ wiring, `run_jobs`; required), `directory` (the module's brand tables, `seed_dir
 - **Migrations regenerated per app** and the standalone dev database recreated (a sketch has no
   data to keep). Scenario A passed again afterwards: 2,121 resources to Silo in 16.7 s through
   all four apps, the deep link recorded as consumed in `pa_deeplink_consumeddeeplink`.
+
+## Scenario D: the module inside JHE, no second server (2026-10-27)
+
+Branch `sketch/jhe-integration`. JHE installs only the module's `jobs` app (two tables); the
+pull runs in a `ThreadDispatcher` thread of JHE's web process, and one new line in JHE's
+existing crontab (`run_jobs --once`, every minute, beside `ow_poll`) is the sweep. No broker,
+no worker service. JHE's patient UI is kept through consent, the hospital picker and "choose
+what to share"; Continue now asks `POST /api/v1/patient-access/launch` (the patient's JHE
+bearer) for the authorize URL, the EHR returns to JHE's already-registered
+`/clients/ehr-patient-portal/callback` (the module takes `redirect_uri` from config, so no
+vendor re-registration), and a new `status` route polls `GET /api/v1/patient-access/jobs/<id>`
+into the existing importing screen, then the existing done screen. fhir-client.js and the
+browser pull/import code are gone; closing the tab no longer stops a pull.
+
+JHE side: `core/patient_access/` holds three plugs named in `compose/patient-access.json`
+(`JheOrmDirectory` over JHE's own EhrBrand tables, `JheUserIdentity`, `JheDirectSink`), and
+`core/services/` gained `get_or_create_ehr_source` (FhirSourceViewSet.create now calls it) and
+`import_r4_bundle` (the import view's per-entry processing under a request-shaped context of
+user + source header; the proper refactor gives the FHIR handlers a write context instead of a
+request). The module's own wiring builds everything from the config; JHE wrote no wiring.
+
+Results:
+
+- **Browser, end to end** (Playwright, hosted sandbox): invitation → hub → consent → picker →
+  checklist → sandbox login and approval → status → done, for the interactive sandbox brand
+  (161 records) and the scripted one (2,121). The authorize request carried server-side PKCE
+  and JHE's existing callback.
+- **API, end to end**: 2,121 resources, 0 rejected, about 20 s launch to done, run by the
+  thread. Same count scenario B delivered over HTTP.
+- **Deploy rehearsal** under gunicorn (dev compose override): `docker compose restart jhe`
+  mid-fetch and, separately, mid-delivery. Both times the worker's exit released the thread's
+  lease, and the next cron tick claimed and finished the job (30-60 s later). Spool shared by
+  `jhe` and `cron` in compose, so no refetch; none left behind.
+- JHE's checks: ruff, migrations, 1,252 backend and 90 frontend tests pass (108 before: the
+  browser pull's tests went with it, status tests came in); the one failure
+  (`test_ow_poll::test_late_arriving_sample_is_not_skipped`) is a date-dependent test that
+  started failing on its own, unrelated.
+
+Found along the way:
+
+1. **sink.begin ran outside the delivery try** (module bug, fixed): a sink that registers
+   things up front failing escaped `run_job` mid-phase. Now a retryable delivery failure.
+2. **Dispatch inside the callback's transaction** (module bug, fixed): a thread or Dramatiq
+   worker could look for the job row before commit and leave the job to the sweep.
+   `OnCommitDispatcher` defers dispatch to `on_commit`; both callbacks use it.
+3. **Redelivery and re-pulls count existing records as rejected.** JHE's import is a create,
+   and a record already stored under the source is refused (409). Delivery is at-least-once:
+   the rehearsal restart mid-delivery left 188 written, the resumed delivery restarted from
+   unit 0, so the receipt says 1,933 saved and 188 rejected while all 2,121 are stored once.
+   A patient reconnecting the same EHR gets "0 saved, 2,121 rejected". Needs either the sink
+   treating "already stored, identical" as ok, a per-unit delivery checkpoint, or an upsert
+   import in JHE.
+4. **The router's loading overlay** stays up until a route function returns; a polling route
+   must hide it itself.
+5. **Vendor client ids live twice**: JHE's `EhrVendor.ehr_client_id` and the module config's
+   vendor entry. In a real build the module's vendor config for a JHE host should read JHE's
+   table (or JHE's table should go).
+6. **Paths in the config are container paths** (`/code/...`), so JHE's GitHub CI would need the
+   module on `PYTHONPATH` and its own config; local `scripts/dev/test.sh` works because the
+   test image inherits both.
+7. **Spool on Fly is per machine**: a job the cron machine resumes after a web restart finds no
+   spool and refetches (the token is kept until the job finishes, so it can). Fine; just slower.
