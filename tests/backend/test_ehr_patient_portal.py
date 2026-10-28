@@ -94,9 +94,12 @@ def test_connect_page_renders(db, client):
     assert resp.status_code == 200
 
 
-def test_callback_page_renders(db, client):
+def test_callback_without_a_sign_in_goes_to_the_error_route(db, client):
+    # Sketch (scenario D): the callback is server-side now; an unknown or missing state is
+    # reported on the portal's own error screen.
     resp = client.get("/clients/ehr-patient-portal/callback")
-    assert resp.status_code == 200
+    assert resp.status_code == 302
+    assert resp["Location"].startswith("/clients/ehr-patient-portal/?route=error")
 
 
 def test_rename_migration_renames_both_rows_and_links_them(db):

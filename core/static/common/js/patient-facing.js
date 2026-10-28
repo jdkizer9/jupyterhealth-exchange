@@ -562,6 +562,7 @@ if (typeof window !== "undefined") {
   window.renderError = renderError;
   window.patientApp = patientApp;
   window.PF_ROUTES = PF_ROUTES;
+  window.PF_ROUTE_TITLES = PF_ROUTE_TITLES;
   window.pfPatientLabel = pfPatientLabel;
   window.pfUniqueSorted = pfUniqueSorted;
   window.pfSources = pfSources;
