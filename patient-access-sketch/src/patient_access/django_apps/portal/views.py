@@ -11,6 +11,7 @@ from patient_access.core.flow import FlowError, finish_upstream_auth, start_upst
 from patient_access.core.interfaces import IdentityError
 from patient_access.core.models import InboundRequest, Participant
 from patient_access.django_apps.jobs.crypto import encrypt_secrets
+from patient_access.django_apps.jobs.dispatch import OnCommitDispatcher
 from patient_access.django_apps.jobs.stores import participant_from_json, participant_to_json
 from patient_access.django_apps.jobs.wiring import get_module
 
@@ -139,7 +140,7 @@ def callback(request: HttpRequest) -> HttpResponse:
                 attempts=m.auth_attempts,
                 identity=m.identity,
                 jobs=m.jobs,
-                dispatcher=m.dispatcher,
+                dispatcher=OnCommitDispatcher(m.dispatcher),
                 http=m.http,
                 clock=m.clock,
             )
