@@ -1,0 +1,250 @@
+{
+  "_about": "Patient Access Module config for JHE (sketch, scenario D). Dev-only values; see core/patient_access/.",
+  "identity": {
+    "class": "core.patient_access.identity.JheUserIdentity"
+  },
+  "directory": {
+    "class": "core.patient_access.directory.JheOrmDirectory"
+  },
+  "spool": {
+    "class": "patient_access.spool.local_disk.LocalDiskSpool",
+    "options": {
+      "root": "/code/local/patient-access/spool"
+    }
+  },
+  "destinations": {
+    "jhe": {
+      "formatter": {
+        "class": "patient_access.formatters.r4_batch.R4BatchFormatter",
+        "options": {
+          "chunk": 100
+        }
+      },
+      "sink": {
+        "class": "core.patient_access.sink.JheDirectSink"
+      }
+    }
+  },
+  "default_destination": "jhe",
+  "dispatcher": {
+    "class": "patient_access.dispatch.thread.ThreadDispatcher",
+    "options": {
+      "lease_seconds": 600
+    }
+  },
+  "redirect_uri": "${SITE_URL}/clients/ehr-patient-portal/callback",
+  "max_attempts": 3,
+  "vendors": {
+    "Epic Sandbox": {
+      "client_id": "77849e74-8e2a-4c2f-826c-bdbef6da3357",
+      "auth_method": "public",
+      "queries": "uscdi",
+      "base_scopes": [
+        "openid",
+        "profile",
+        "launch/patient"
+      ]
+    },
+    "SMART Sandbox": {
+      "client_id": "patient-access-sketch",
+      "queries": "smart-reference",
+      "base_scopes": [
+        "launch/patient",
+        "openid",
+        "fhirUser"
+      ],
+      "auth_method": "public"
+    },
+    "SMART Sandbox Asymmetric": {
+      "client_id": "patient-access-sketch",
+      "queries": "smart-reference",
+      "base_scopes": [
+        "launch/patient",
+        "openid",
+        "fhirUser"
+      ],
+      "auth_method": "private_key_jwt",
+      "private_key_path": "/code/patient-access-sketch/compose/dev-keys/smart-client-dev.pem",
+      "key_id": "sketch-1",
+      "jwt_alg": "RS384"
+    }
+  },
+  "query_tables": {
+    "uscdi": [
+      {
+        "label": "Demographics",
+        "resource_type": "Patient",
+        "query": "Patient",
+        "single": true,
+        "scope": "patient/Patient.read"
+      },
+      {
+        "label": "Conditions",
+        "resource_type": "Condition",
+        "query": "Condition",
+        "scope": "patient/Condition.read"
+      },
+      {
+        "label": "Medications",
+        "resource_type": "MedicationRequest",
+        "query": "MedicationRequest",
+        "scope": "patient/MedicationRequest.read"
+      },
+      {
+        "label": "Medication Dispenses",
+        "resource_type": "MedicationDispense",
+        "query": "MedicationDispense",
+        "scope": "patient/MedicationDispense.read"
+      },
+      {
+        "label": "Allergies",
+        "resource_type": "AllergyIntolerance",
+        "query": "AllergyIntolerance",
+        "scope": "patient/AllergyIntolerance.read"
+      },
+      {
+        "label": "Immunizations",
+        "resource_type": "Immunization",
+        "query": "Immunization",
+        "scope": "patient/Immunization.read"
+      },
+      {
+        "label": "Procedures",
+        "resource_type": "Procedure",
+        "query": "Procedure",
+        "scope": "patient/Procedure.read"
+      },
+      {
+        "label": "Labs",
+        "resource_type": "Observation",
+        "query": "Observation?category=laboratory",
+        "scope": "patient/Observation.read"
+      },
+      {
+        "label": "Vital Signs",
+        "resource_type": "Observation",
+        "query": "Observation?category=vital-signs",
+        "scope": "patient/Observation.read"
+      },
+      {
+        "label": "Diagnostic Reports",
+        "resource_type": "DiagnosticReport",
+        "query": "DiagnosticReport",
+        "scope": "patient/DiagnosticReport.read",
+        "documents": true
+      },
+      {
+        "label": "Documents",
+        "resource_type": "DocumentReference",
+        "query": "DocumentReference?category=clinical-note",
+        "scope": "patient/DocumentReference.read",
+        "documents": true
+      },
+      {
+        "label": "Encounters",
+        "resource_type": "Encounter",
+        "query": "Encounter",
+        "scope": "patient/Encounter.read"
+      },
+      {
+        "label": "Care Plans",
+        "resource_type": "CarePlan",
+        "query": "CarePlan?category=assess-plan",
+        "scope": "patient/CarePlan.read"
+      },
+      {
+        "label": "Care Teams",
+        "resource_type": "CareTeam",
+        "query": "CareTeam?status=active",
+        "scope": "patient/CareTeam.read"
+      },
+      {
+        "label": "Goals",
+        "resource_type": "Goal",
+        "query": "Goal",
+        "scope": "patient/Goal.read"
+      },
+      {
+        "label": "Service Requests",
+        "resource_type": "ServiceRequest",
+        "query": "ServiceRequest",
+        "scope": "patient/ServiceRequest.read"
+      },
+      {
+        "label": "Devices",
+        "resource_type": "Device",
+        "query": "Device",
+        "explicit_patient": true,
+        "scope": "patient/Device.read"
+      },
+      {
+        "label": "Questionnaire Responses",
+        "resource_type": "QuestionnaireResponse",
+        "query": "QuestionnaireResponse",
+        "scope": "patient/QuestionnaireResponse.read"
+      }
+    ],
+    "smart-reference": {
+      "extends": "uscdi",
+      "override": {
+        "Documents": {
+          "query": "DocumentReference"
+        }
+      },
+      "_why": "The reference server leaves DocumentReference.category empty; Epic's clinical-note filter would hide every note."
+    }
+  },
+  "seed": {
+    "smart_sandbox": [
+      {
+        "name": "SMART Sandbox Health",
+        "vendor": "SMART Sandbox",
+        "line": "1 Sandbox Way",
+        "city": "Boston",
+        "state": "MA",
+        "postal": "02115",
+        "launch": {
+          "client_type": "public",
+          "pkce": "always"
+        }
+      },
+      {
+        "name": "SMART Sandbox Express (no login, fixed patient)",
+        "vendor": "SMART Sandbox",
+        "line": "4 Sandbox Way",
+        "city": "Cambridge",
+        "state": "MA",
+        "postal": "02139",
+        "launch": {
+          "client_type": "public",
+          "pkce": "always",
+          "skip_login": true,
+          "skip_auth": true,
+          "patient": [
+            "12edb5a0-ec71-45b7-aff6-0fef1c382881"
+          ]
+        }
+      },
+      {
+        "name": "SMART Sandbox Express Asymmetric (no login, fixed patient)",
+        "vendor": "SMART Sandbox Asymmetric",
+        "line": "6 Sandbox Way",
+        "city": "Cambridge",
+        "state": "MA",
+        "postal": "02139",
+        "launch": {
+          "client_type": "confidential-asymmetric",
+          "pkce": "auto",
+          "jwks_public_key": "/code/patient-access-sketch/compose/dev-keys/smart-client-dev.pub.pem",
+          "kid": "sketch-1",
+          "alg": "RS384",
+          "skip_login": true,
+          "skip_auth": true,
+          "patient": [
+            "80a75b5a-fd30-4f38-895d-d8098fe7206e"
+          ]
+        }
+      }
+    ]
+  }
+}

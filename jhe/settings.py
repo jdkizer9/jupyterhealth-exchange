@@ -78,6 +78,11 @@ CSRF_TRUSTED_ORIGINS = [SITE_URL]
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Patient Access Module (sketch, scenario D). From the environment only, never defaulted here:
+# compose/environment/jhe.env carries the dev values.
+PATIENT_ACCESS_CONFIG = os.getenv("PATIENT_ACCESS_CONFIG")
+PATIENT_ACCESS_DEPLOYMENT_KEY = os.getenv("PATIENT_ACCESS_DEPLOYMENT_KEY")
+
 INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "django.contrib.admin",
