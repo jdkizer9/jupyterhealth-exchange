@@ -7,3 +7,8 @@
 # Default: poll every 15 minutes. Operators can adjust by editing this file
 # and rebuilding the jhe_cron image.
 */15 * * * * cd /code && python manage.py ow_poll
+
+# Patient Access Module sweep (sketch, scenario D). Pulls normally run in a thread of the web
+# process; this finishes any a restart or deploy dropped, retries failed deliveries, and
+# deletes orphaned spools. Exits at once when there is nothing to do.
+* * * * * cd /code && python manage.py run_jobs --once
