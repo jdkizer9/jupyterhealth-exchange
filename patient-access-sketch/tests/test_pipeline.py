@@ -99,6 +99,17 @@ def test_delivery_failure_keeps_spool_and_resumes_without_refetch():
     assert calls["fetch"] == 1
 
 
+def test_sink_begin_failure_is_a_retryable_delivery_failure():
+    class BeginFails(MemorySink):
+        def begin(self, job):
+            raise RuntimeError("identifier already belongs to another patient")
+
+    deps, jobs, spool, _ = make(sink=BeginFails())
+    job = run_job("j1", deps)
+    assert job.status == JobStatus.FAILED and "another patient" in job.failure
+    assert spool.spools  # kept for the retry
+
+
 def test_delivery_gives_up_after_max_attempts():
     deps, jobs, spool, _ = make(sink=MemorySink(fail_on="Condition"))
     for _ in range(3):

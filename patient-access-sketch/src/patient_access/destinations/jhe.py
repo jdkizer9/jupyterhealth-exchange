@@ -30,6 +30,22 @@ def _issues(entry: dict, severities: tuple[str, ...]) -> list[str]:
     ]
 
 
+def tally_batch_response(body: dict, out: UnitOutcome) -> UnitOutcome:
+    """Count a JHE import batch-response into `out`: 2xx entries are ok (with their warnings),
+    the rest failed under their first error. Shared with sinks that call JHE in-process."""
+    for entry in body.get("entry") or []:
+        status = str((entry.get("response") or {}).get("status") or "")
+        if status.startswith("2"):
+            out.ok += 1
+            for w in _issues(entry, ("warning",)):
+                out.warnings[w] = out.warnings.get(w, 0) + 1
+        else:
+            out.failed += 1
+            reason = next(iter(_issues(entry, ("error", "fatal"))), status or "unknown")
+            out.reasons[reason] = out.reasons.get(reason, 0) + 1
+    return out
+
+
 class JheHttpSink(Sink):
     accepts = frozenset({"batch"})
 
@@ -90,16 +106,7 @@ class JheSession(SinkSession):
             out.failed = unit.resources
             out.reasons[reason] = unit.resources
         else:
-            for entry in r.json().get("entry") or []:
-                status = str((entry.get("response") or {}).get("status") or "")
-                if status.startswith("2"):
-                    out.ok += 1
-                    for w in _issues(entry, ("warning",)):
-                        out.warnings[w] = out.warnings.get(w, 0) + 1
-                else:
-                    out.failed += 1
-                    reason = next(iter(_issues(entry, ("error", "fatal"))), status or "unknown")
-                    out.reasons[reason] = out.reasons.get(reason, 0) + 1
+            tally_batch_response(r.json(), out)
         self.ok += out.ok
         self.failed += out.failed
         for k, v in out.reasons.items():

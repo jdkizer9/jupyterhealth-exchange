@@ -162,9 +162,12 @@ def _deliver(job: Job, handle: SpoolHandle, deps: Deps) -> None:
     job.failure = None
     deps.jobs.save(job)
     deps.on_event(job, "deliver.start")
-    session = destination.sink.begin(job)
+    session = None
     units = 0
     try:
+        # begin is inside the try: a sink that registers things up front (JHE: identifier,
+        # FhirSource) fails like any other delivery error, not out of run_job mid-phase.
+        session = destination.sink.begin(job)
         for unit in destination.formatter.format(handle, job):
             session.write(unit, handle)
             units += 1
@@ -172,7 +175,8 @@ def _deliver(job: Job, handle: SpoolHandle, deps: Deps) -> None:
     except Exception as e:  # noqa: BLE001 - the spool still has the data; retry later
         log.exception("job %s: delivery failed", job.id)
         try:
-            session.abort(str(e))
+            if session is not None:
+                session.abort(str(e))
         except Exception:  # noqa: BLE001
             log.exception("job %s: sink abort failed", job.id)
         if job.attempts >= deps.max_attempts:
