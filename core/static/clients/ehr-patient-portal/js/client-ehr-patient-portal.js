@@ -158,6 +158,18 @@ function eppJobText(job) {
   return lines.join("\n");
 }
 
+// The progress card's one line for a job: where it is, in the patient's terms.
+function eppProgressCopy(job) {
+  const fetched = job.types.filter((t) => t.status !== "pending");
+  const records = job.types.reduce((sum, t) => sum + (t.count || 0), 0);
+  if (job.status === "queued") return "Starting…";
+  if (job.status === "fetching") {
+    return `${fetched.length} of ${job.types.length} record types fetched · ${records} records so far`;
+  }
+  if (job.status === "failed") return "Saving hit a problem; retrying automatically.";
+  return `Saving ${records} records to JupyterHealth…`;
+}
+
 // Status route (?route=status&job=...&source=...): the importing screen, fed by polling the job
 // until it finishes, then the done screen (or the error callout). The pull runs on the server, so
 // the patient may close the page; it keeps going.
@@ -166,10 +178,14 @@ async function eppStatus(params) {
   const lede = document.querySelector("#pf_main .pf-lede");
   if (lede) lede.textContent = "Securely syncing your records into your study. You can close this page; the import keeps going.";
   const out = document.getElementById("out");
+  const copy = document.querySelector("#pf_main .pf-import-card__copy");
   const retryHref = pfUrl("connect", { source: String(params.source || PATIENT_FACING_CONFIG.dataSourceIds[0]) });
   for (;;) {
     const job = await pfApi("GET", `patient-access/jobs/${encodeURIComponent(params.job || "")}`);
     if (out) out.textContent = eppJobText(job);
+    if (copy) copy.textContent = eppProgressCopy(job);
+    // The router keeps its overlay up until a route returns; this one keeps polling, so drop it now.
+    pfHideLoading();
     if (job.status === "done") {
       return pfNav("done", { source: String(params.source || job.dataSourceId) }, true);
     }
@@ -197,5 +213,6 @@ if (typeof window !== "undefined") {
   window.eppRenderScopePicker = eppRenderScopePicker;
   window.eppTypeLine = eppTypeLine;
   window.eppJobText = eppJobText;
+  window.eppProgressCopy = eppProgressCopy;
   window.eppStatus = eppStatus;
 }

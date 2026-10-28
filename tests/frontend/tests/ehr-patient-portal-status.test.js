@@ -62,6 +62,21 @@ describe("eppJobText", () => {
   });
 });
 
+describe("eppProgressCopy", () => {
+  test("counts fetched types and records while fetching, then says it is saving", () => {
+    const fetching = {
+      ...JOB,
+      status: "fetching",
+      types: [
+        { label: "Labs", status: "ok", count: 12 },
+        { label: "Goals", status: "pending", count: 0 },
+      ],
+    };
+    expect(window.eppProgressCopy(fetching)).toBe("1 of 2 record types fetched · 12 records so far");
+    expect(window.eppProgressCopy({ ...JOB, status: "delivering" })).toBe("Saving 12 records to JupyterHealth…");
+  });
+});
+
 describe("the status route", () => {
   test("is registered with the shared router", () => {
     expect(window.PF_ROUTES.status).toBe(window.eppStatus);
