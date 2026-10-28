@@ -413,9 +413,13 @@ and the polling worker claimed the job within seconds and delivered all 2,121 re
    polling dispatcher and errored under `ThreadDispatcher`, contradicting "the sweep is independent
    of the dispatcher". Fixed: any dispatcher, with polling defaults.
 2. **Resume must verify the spool, not the row** (pipeline `_spool_intact`): a type marked done but
-   missing from the spool is refetched under a live token; a finished fetch with a lost spool fails
-   with "connect again". Without this a redeploy on Fly would have delivered a partial bundle.
-   Unit-tested; not reproduced live, since the dev spool is a bind mount.
+   missing from the spool is refetched while the EHR token is live, whatever phase the job was in;
+   only an expired token makes it fail with "connect again". For that to hold the token now stays
+   on the row (encrypted) until the job finishes rather than being dropped at the end of the
+   fetch: seconds to a minute longer at rest, bounded by its one-hour expiry, in exchange for never
+   asking a patient to reauthorize over a lost spool. Without the check a redeploy on Fly would
+   have delivered a partial bundle. Unit-tested; not reproduced live, since the dev spool is a bind
+   mount.
 3. **Leases are released at process exit** (`atexit` in `ThreadDispatcher`). Works under gunicorn's
    graceful stop, which is production; does not run under the dev reloader's kill, where the
    10-minute lease expiry is the fallback. Recovery latency is therefore seconds in production and

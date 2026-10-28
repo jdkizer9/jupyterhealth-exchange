@@ -65,7 +65,7 @@ def test_happy_path_walks_every_phase_and_shreds():
     assert stored.spool_ref is None and spool.deleted == ["mem-j1"]
 
 
-def test_token_is_dropped_right_after_fetch():
+def test_token_is_kept_until_the_job_finishes():
     seen = {}
     deps, jobs, spool, sink = make()
     sink_begin = sink.begin
@@ -77,7 +77,8 @@ def test_token_is_dropped_right_after_fetch():
 
     sink.begin = spy_begin
     run_job("j1", deps)
-    assert seen == {"has_token": False, "has_key": True}
+    assert seen == {"has_token": True, "has_key": True}  # a lost spool during delivery can still refetch
+    assert not jobs.get("j1").credentials  # and nothing survives the end
 
 
 def test_delivery_failure_keeps_spool_and_resumes_without_refetch():
@@ -156,12 +157,30 @@ def test_lost_spool_during_fetch_is_refetched():
     assert job.status == JobStatus.DONE and calls["fetch"] == 1 and job.receipt.resources == 3
 
 
-def test_lost_spool_after_fetch_fails_honestly():
+def test_lost_spool_after_fetch_refetches_while_the_token_lives():
+    calls = {"fetch": 0}
+
+    def counting_fetch(*a):
+        calls["fetch"] += 1
+        fake_fetch(*a)
+
+    deps, jobs, spool, sink = make(fetch=counting_fetch)
+    job = jobs.get("j1")
+    job.attempts = 1
+    job.status = JobStatus.FETCHED  # fetch done, then the machine was replaced before delivery
+    job.credentials[SPOOL_KEY] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    job.outcomes = [TypeOutcome("Conditions", "Condition", "Condition", status="ok", count=3)]
+    jobs.save(job)
+    job = run_job("j1", deps)
+    assert job.status == JobStatus.DONE and calls["fetch"] == 1 and job.receipt.resources == 3
+
+
+def test_lost_spool_with_expired_token_fails_honestly():
     deps, jobs, spool, sink = make()
     job = jobs.get("j1")
     job.attempts = 1
     job.status = JobStatus.FETCHED
-    job.credentials.pop(EHR_TOKEN)  # dropped at the end of the fetch, as always
+    job.token_expires_at = NOW - timedelta(seconds=1)  # more than an hour went by
     job.credentials[SPOOL_KEY] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     job.outcomes = [TypeOutcome("Conditions", "Condition", "Condition", status="ok", count=3)]
     jobs.save(job)

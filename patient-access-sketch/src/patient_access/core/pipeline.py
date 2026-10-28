@@ -103,8 +103,10 @@ def _spool_intact(job: Job, handle: SpoolHandle, deps: Deps) -> bool:
     lost = [t for t, n in expected.items() if n and actual.get(t, 0) != n]
     if not lost:
         return True
-    if job.status in (JobStatus.QUEUED, JobStatus.FETCHING):
+    token_live = EHR_TOKEN in job.credentials and (job.token_expires_at is None or job.token_expires_at > deps.clock())
+    if token_live:
         log.warning("job %s: spool lost for %s; refetching", job.id, lost)
+        job.status = JobStatus.FETCHING
         for o in job.outcomes:
             if o.resource_type in lost:
                 o.status, o.count, o.pages, o.bytes = "pending", 0, 0, 0
@@ -115,8 +117,8 @@ def _spool_intact(job: Job, handle: SpoolHandle, deps: Deps) -> bool:
     _fail_terminal(
         job,
         deps,
-        "The downloaded records were lost before they could be delivered (the service restarted). "
-        "Please connect again.",
+        "The downloaded records were lost before they could be delivered and the authorization has "
+        "expired. Please connect again.",
     )
     return False
 
@@ -142,9 +144,10 @@ def _fetch(job: Job, handle: SpoolHandle, deps: Deps) -> None:
         log.exception("job %s: fetch failed", job.id)
         _fail_terminal(job, deps, f"download failed: {e}")
         return
-    # The token is no longer needed by anything after the fetch.
-    job.credentials.pop(EHR_TOKEN)
-    job.token_expires_at = None
+    # The token stays on the row (encrypted) until the job finishes, not just until the fetch
+    # does: if the spool is lost before delivery completes (a redeploy on ephemeral disk), a live
+    # token means a refetch instead of asking the patient to authorize again. It expires within
+    # the hour regardless, and _finish clears it.
     job.status = JobStatus.FETCHED
     deps.jobs.save(job)
     deps.on_event(job, "fetch.done")
