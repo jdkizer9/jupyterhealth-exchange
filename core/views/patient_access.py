@@ -1,0 +1,85 @@
+"""Patient Access Module endpoints for the EHR Patient Portal (sketch, scenario D).
+
+The portal's JS keeps its screens; these replace the browser-side SMART flow. The module runs
+the EHR sign-in and the pull server-side, in a thread of this process (cron sweeps up any a
+restart drops), so closing the tab no longer stops a pull.
+
+    POST /api/v1/patient-access/launch       {location_id, scopes, data_source_id} -> {authorize_url}
+    GET  /api/v1/patient-access/jobs/<id>    the patient's own job: status, per-type rows, receipt
+    GET  /clients/ehr-patient-portal/callback (ehr_patient_portal.py) finishes sign-in, starts the job
+"""
+
+from patient_access.core.flow import FlowError, start_upstream_auth
+from patient_access.django_apps.jobs.wiring import get_module
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from core.models import DataSource
+from core.patient_access.identity import PROVIDER, participant_for
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def launch(request):
+    patient = request.user.get_patient()
+    if patient is None:
+        return Response({"error": "Authenticated user is not a patient"}, status=400)
+    data_source_id = request.data.get("data_source_id")
+    if not DataSource.objects.filter(id=data_source_id).exists():
+        return Response({"error": "Unknown data source"}, status=400)
+    # The consent screen comes first in the portal; the sketch does not re-check it here.
+    m = get_module()
+    try:
+        url = start_upstream_auth(
+            participant=participant_for(patient, data_source_id),
+            location_id=str(request.data.get("location_id", "")),
+            directory=m.directory,
+            vendors=m.vendors,
+            attempts=m.auth_attempts,
+            redirect_uri=m.redirect_uri,
+            destination=m.default_destination,
+            http=m.http,
+            clock=m.clock,
+            scopes=list(request.data.get("scopes") or []),
+        )
+    except FlowError as e:
+        return Response({"error": str(e)}, status=400)
+    return Response({"authorize_url": url})
+
+
+def job_json(job):
+    receipt = job.receipt
+    return {
+        "id": job.id,
+        "status": str(job.status),
+        "terminal": job.status.terminal,
+        "data_source_id": job.participant.attrs.get("data_source_id"),
+        "source": {"brand": job.source.brand_name, "location": job.source.location_name},
+        "types": [{"label": o.label, "status": o.status, "count": o.count, "error": o.error} for o in job.outcomes],
+        "receipt": (
+            {
+                "resources": receipt.resources,
+                "rejected": receipt.details.get("rejected", 0),
+                "failures": receipt.failures,
+                "warnings": receipt.warnings,
+                "fhir_source_id": receipt.details.get("fhir_source_id"),
+            }
+            if receipt
+            else None
+        ),
+        "failure": job.failure,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def job_status(request, job_id):
+    patient = request.user.get_patient()
+    try:
+        job = get_module().jobs.get(job_id)
+    except KeyError:
+        job = None
+    if job is None or patient is None or job.participant.provider != PROVIDER or job.participant.ref != str(patient.id):
+        return Response({"error": "Not found"}, status=404)
+    return Response(job_json(job))

@@ -6,7 +6,7 @@ from rest_framework.routers import DefaultRouter
 from core.fhir.config import FHIR_VERSION
 
 from . import views
-from .views import common, ehr_patient_portal, ow
+from .views import common, ehr_patient_portal, ow, patient_access
 from .views.fhir import FHIRResourceView, capability_statement, smart_configuration
 from .views.fhir_import import FHIRImportView
 
@@ -113,6 +113,9 @@ urlpatterns = [
         name="ehr-patient-portal-callback",
     ),
     path("api/v1/ehr-patient-portal/brands", ehr_patient_portal.brands_search, name="ehr-patient-portal-brands"),
+    # Patient Access Module (sketch, scenario D): server-side SMART launch and the job's status.
+    path("api/v1/patient-access/launch", patient_access.launch, name="patient-access-launch"),
+    path("api/v1/patient-access/jobs/<str:job_id>", patient_access.job_status, name="patient-access-job"),
     path(
         "api/v1/ehr-patient-portal/identifier",
         ehr_patient_portal.save_patient_identifier,
