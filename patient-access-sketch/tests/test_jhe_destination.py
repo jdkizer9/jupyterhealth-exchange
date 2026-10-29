@@ -1,6 +1,6 @@
 """R4BatchFormatter chunking and JheHttpSink's per-entry tally, against a fake JHE."""
 
-from patient_access.core.models import Job, Participant, Secrets
+from patient_access.core.models import ContentPolicy, Job, Participant, Secrets
 from patient_access.destinations import jhe as jhe_mod
 from patient_access.destinations.jhe import JheHttpSink
 from patient_access.formatters.r4_batch import R4BatchFormatter
@@ -50,12 +50,12 @@ def test_batches_and_tally(monkeypatch):
             "40001", "jhe_invitation", attrs={"jhe_client_id": "c"}, secrets=Secrets({JHE_TOKEN: "tok"})
         ),
         source=source(selection(iss="https://ehr/fhir", brand="B", facility="L"), ehr_patient_id="pat"),
-        destination="jhe",
+        destinations=("jhe",),
     )
     spool = InMemorySpool().open(job, b"k" * 32)
     for i in range(250):
         spool.append("Observation", {"resourceType": "Observation", "id": str(i)})
-    units = list(R4BatchFormatter(chunk=100).format(spool, job))
+    units = list(R4BatchFormatter(chunk=100).format(spool, job, ContentPolicy()))
     assert [u.resources for u in units] == [100, 100, 50] and units[0].kind == "batch"
     session = JheHttpSink("http://jhe:8000", 70006).begin(job)
     for u in units:

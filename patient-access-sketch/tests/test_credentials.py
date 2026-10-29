@@ -102,7 +102,7 @@ def run_flow(methods, keyring, ehr):
         keyring=keyring,
         attempts=attempts,
         redirect_uri="https://pa.example/callback",
-        destination="d",
+        destinations=("d",),
         http=ehr,
         clock=lambda: NOW,
         scopes=["patient/Goal.read"],

@@ -89,3 +89,15 @@ def test_directory_merges_customer_overrides_into_settings():
     assert [q.label for q in s1.fetch.queries] == ["Labs"] and s1.fetch.page_cap == 2
     assert [q.label for q in s2.fetch.queries] == ["Labs", "Goals"] and s2.fetch.page_cap == 100
     assert s1.registration is base.registration  # the registration is per vendor, untouched by overrides
+
+
+def test_plan_outcomes_marks_not_requested_and_not_granted():
+    from patient_access.core.flow import plan_outcomes
+
+    s = settings("v", TABLE)
+    outcomes = plan_outcomes(s, requested=["launch/patient", "patient/Goal.read"], granted=["patient/Goal.read"])
+    assert {o.label: o.status for o in outcomes} == {"Labs": "not_requested", "Goals": "pending"}
+    outcomes = plan_outcomes(
+        s, requested=["patient/Observation.read", "patient/Goal.read"], granted=["patient/Goal.rs"]
+    )
+    assert {o.label: o.status for o in outcomes} == {"Labs": "not_granted", "Goals": "pending"}

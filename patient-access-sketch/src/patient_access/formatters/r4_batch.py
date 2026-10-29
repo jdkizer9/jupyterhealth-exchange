@@ -8,19 +8,18 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from patient_access.core.interfaces import Formatter, SpoolHandle
-from patient_access.core.models import Job, Unit
+from patient_access.core.models import ContentPolicy, Job, Unit
 
 
 class R4BatchFormatter(Formatter):
     produces = frozenset({"batch"})
 
-    def __init__(self, chunk: int = 100, skip_types: list[str] | None = None):
+    def __init__(self, chunk: int = 100):
         self.chunk = chunk
-        self.skip_types = set(skip_types or [])
 
-    def format(self, spool: SpoolHandle, job: Job) -> Iterator[Unit]:
+    def format(self, spool: SpoolHandle, job: Job, content: ContentPolicy) -> Iterator[Unit]:
         for resource_type, count in spool.index().types.items():
-            if not count or resource_type in self.skip_types:
+            if not count or not content.takes(resource_type):
                 continue
             batch: list[dict] = []
             n = 0

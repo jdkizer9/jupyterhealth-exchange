@@ -14,8 +14,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .interfaces import Directory, Formatter, JobStore, Sink, Spool, SpoolHandle
-from .models import Job, JobId, JobStatus, Receipt
+from .interfaces import DestinationResolver, Directory, Formatter, JobStore, Sink, Spool, SpoolHandle
+from .models import ContentPolicy, Delivery, Job, JobId, JobStatus, Receipt
 from .source_settings import ConfigError, SourceSettings
 
 log = logging.getLogger(__name__)
@@ -26,11 +26,16 @@ EHR_TOKEN = "ehr_access_token"
 
 @dataclass
 class Destination:
-    """A Formatter and a Sink configured together; the pairing is checked at construction."""
+    """A Formatter and a Sink configured together; the pairing is checked at construction.
+
+    `required`: a required destination that gives up fails the job; a best-effort one fails on
+    its own and the job can still finish. `content`: what this destination takes (§14)."""
 
     name: str
     formatter: Formatter
     sink: Sink
+    required: bool = True
+    content: ContentPolicy = field(default_factory=ContentPolicy)
 
     def __post_init__(self) -> None:
         missing = set(self.formatter.produces) - set(self.sink.accepts)
@@ -50,6 +55,16 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class StaticResolver(DestinationResolver):
+    """Deliver to what the launch recorded (plus a fixed list, if given)."""
+
+    def __init__(self, always: tuple[str, ...] = ()):
+        self.always = always
+
+    def resolve(self, job: Job) -> tuple[str, ...]:
+        return self.always
+
+
 @dataclass
 class Deps:
     jobs: JobStore
@@ -58,7 +73,8 @@ class Deps:
     directory: Directory  # for settings_for: the fetch profile is looked up per run, never stored
     fetch: FetchFn
     clock: Callable[[], datetime] = utcnow
-    max_attempts: int = 3
+    max_attempts: int = 3  # per destination
+    resolver: DestinationResolver = field(default_factory=StaticResolver)
     on_event: Callable[[Job, str], None] = field(default=lambda job, event: None)
 
 
@@ -155,39 +171,79 @@ def _fetch(job: Job, handle: SpoolHandle, deps: Deps) -> None:
 
 
 def _deliver(job: Job, handle: SpoolHandle, deps: Deps) -> None:
-    destination = deps.destinations.get(job.destination)
-    if destination is None:
-        _fail_terminal(job, deps, f"destination {job.destination!r} is not configured")
-        return
+    """Phases 5-6 for every destination (design §14): each gets its own formatter run, sink
+    session, receipt and attempt count; one failing does not stop the next. Retry re-runs only
+    the deliveries that failed. The spool outlives every delivery and is deleted at the end."""
+    # The resolver may add destinations at delivery time (a consent given while queued).
+    for name in deps.resolver.resolve(job):
+        if name not in job.destinations:
+            job.destinations = (*job.destinations, name)
     job.status = JobStatus.DELIVERING
     job.failure = None
     deps.jobs.save(job)
     deps.on_event(job, "deliver.start")
+    for name in job.destinations:
+        delivery = job.delivery(name)
+        if delivery.terminal:
+            continue
+        destination = deps.destinations.get(name)
+        if destination is None:
+            delivery.status, delivery.failure = "failed_terminal", f"destination {name!r} is not configured"
+            delivery.finished_at = deps.clock()
+            deps.jobs.save(job)
+            continue
+        _deliver_one(job, handle, deps, destination, delivery)
+        deps.jobs.save(job)
+    _settle(job, deps)
+
+
+def _deliver_one(job: Job, handle: SpoolHandle, deps: Deps, destination: Destination, delivery: Delivery) -> None:
+    delivery.status, delivery.failure = "delivering", None
+    delivery.attempts += 1
+    delivery.started_at = delivery.started_at or deps.clock()
+    deps.jobs.save(job)
     session = None
-    units = 0
     try:
         # begin is inside the try: a sink that registers things up front (JHE: identifier,
         # FhirSource) fails like any other delivery error, not out of run_job mid-phase.
         session = destination.sink.begin(job)
-        for unit in destination.formatter.format(handle, job):
+        for unit in destination.formatter.format(handle, job, destination.content):
             session.write(unit, handle)
-            units += 1
         receipt: Receipt = session.finish()
     except Exception as e:  # noqa: BLE001 - the spool still has the data; retry later
-        log.exception("job %s: delivery failed", job.id)
+        log.exception("job %s: delivery to %s failed", job.id, destination.name)
         try:
             if session is not None:
                 session.abort(str(e))
         except Exception:  # noqa: BLE001
             log.exception("job %s: sink abort failed", job.id)
-        if job.attempts >= deps.max_attempts:
-            _fail_terminal(job, deps, f"delivery failed after {job.attempts} attempts: {e}")
+        if delivery.attempts >= deps.max_attempts:
+            delivery.status = "failed_terminal"
+            delivery.failure = f"delivery failed after {delivery.attempts} attempts: {e}"
+            delivery.finished_at = deps.clock()
         else:
-            job.status = JobStatus.FAILED
-            job.failure = f"delivery failed, will retry: {e}"
-            deps.jobs.save(job)
+            delivery.status, delivery.failure = "failed", f"delivery failed, will retry: {e}"
         return
-    job.receipt = receipt
+    delivery.status, delivery.receipt, delivery.finished_at = "done", receipt, deps.clock()
+
+
+def _settle(job: Job, deps: Deps) -> None:
+    """The job's status from its deliveries. Required ones decide; best-effort ones only record."""
+
+    def is_required(name: str) -> bool:
+        d = deps.destinations.get(name)
+        return d is None or d.required  # an unconfigured name was marked failed_terminal: required
+
+    required = [job.delivery(n) for n in job.destinations if is_required(n)]
+    gave_up = [d for d in required if d.status == "failed_terminal"]
+    if gave_up:
+        _fail_terminal(job, deps, "; ".join(d.failure or "" for d in gave_up))
+        return
+    if any(d.status == "failed" for d in job.deliveries.values()):
+        job.status = JobStatus.FAILED
+        job.failure = "; ".join(f"{n}: {d.failure}" for n, d in job.deliveries.items() if d.status == "failed")
+        deps.jobs.save(job)
+        return
     job.status = JobStatus.DONE
     _finish(job, deps)
     deps.on_event(job, "deliver.done")

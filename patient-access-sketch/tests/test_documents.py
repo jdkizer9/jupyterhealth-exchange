@@ -52,7 +52,7 @@ def _setup(policy):
         id="j",
         participant=Participant("p", "s"),
         source=source(selection(iss=BASE), ehr_patient_id="pat"),
-        destination="d",
+        destinations=("d",),
         credentials=Secrets({EHR_TOKEN: "t"}),
         token_expires_at=datetime.now(UTC) + timedelta(hours=1),
     )

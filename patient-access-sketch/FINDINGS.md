@@ -534,3 +534,25 @@ Epic advertises all three methods at every one of the 771 servers that answered 
 its bundle. Both hosts serve `/.well-known/jwks.json`. Public, `client_secret_basic` and
 `private_key_jwt` pass end to end against the SMART sandbox; JHE scenario D delivers 2,121
 records.
+
+## Post-sketch: fan-out and per-destination content (2026-10-29)
+
+Design §14. A job now carries `destinations` and a `deliveries` map; each destination gets its
+own formatter run, sink session, attempt count and receipt, and one failing does not stop the
+next. Retry re-runs only the deliveries that failed; the spool and credentials are cleared when
+every delivery is terminal. `Destination.required` decides whether a destination that gives up
+fails the job or only itself. A `DestinationResolver` plug can add destinations at delivery
+time (the real build resolves per study from consents). `Destination.content` is a
+`ContentPolicy` (documents on/off, resource-type allow/deny) that the formatter honours, so JHE
+can stop taking binaries without a second formatter. Every query-table row now appears in the
+outcomes: `not_requested` (unchecked at the checklist) and `not_granted` (withheld by the EHR).
+
+Verified: 8 new pipeline tests; JHE scenario D with two destinations (JHE's import and a Silo
+bucket on JHE's own compose stack) delivers 2,121 records to both in 15 s, two receipts on the
+status page; the standalone server unchanged with Silo only.
+
+Found: with `max_attempts = 3` and the sweep every minute, a required destination that is down
+for three minutes makes the job `failed_terminal` (seen while Silo was not yet up: JHE done,
+S3 gave up after 3 attempts in ~3 minutes). The attempt count is the right unit, but the real
+build wants a backoff schedule (minutes, then hours, over a day) rather than three quick tries,
+and an operator action to re-open a terminal delivery once the destination is back.

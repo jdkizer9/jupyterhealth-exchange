@@ -6,7 +6,7 @@ The edge where rows become dataclasses (design §9 rule 2).
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.db import transaction
 from django.db.models import Q
@@ -38,6 +38,38 @@ def participant_from_json(d: dict, secrets_enc: str) -> m.Participant:
 
 def _receipt_from_json(d: dict | None) -> m.Receipt | None:
     return m.Receipt(**d) if d else None
+
+
+def _dt(s: str | None) -> datetime | None:
+    return datetime.fromisoformat(s) if s else None
+
+
+def deliveries_to_json(deliveries: dict[str, m.Delivery]) -> dict:
+    return {
+        name: {
+            "status": d.status,
+            "attempts": d.attempts,
+            "receipt": asdict(d.receipt) if d.receipt else None,
+            "failure": d.failure,
+            "started_at": d.started_at.isoformat() if d.started_at else None,
+            "finished_at": d.finished_at.isoformat() if d.finished_at else None,
+        }
+        for name, d in deliveries.items()
+    }
+
+
+def deliveries_from_json(raw: dict | None) -> dict[str, m.Delivery]:
+    return {
+        name: m.Delivery(
+            status=d.get("status", "pending"),
+            attempts=d.get("attempts", 0),
+            receipt=_receipt_from_json(d.get("receipt")),
+            failure=d.get("failure"),
+            started_at=_dt(d.get("started_at")),
+            finished_at=_dt(d.get("finished_at")),
+        )
+        for name, d in (raw or {}).items()
+    }
 
 
 def selection_to_json(sel: m.Selection) -> dict:
@@ -75,7 +107,7 @@ class OrmAuthAttemptStore(AuthAttemptStore):
             },
             redirect_uri=a.redirect_uri,
             token_endpoint=a.token_endpoint,
-            destination=a.destination,
+            destinations=list(a.destinations),
             created_at=a.created_at,
             expires_at=a.expires_at,
         )
@@ -103,7 +135,7 @@ class OrmAuthAttemptStore(AuthAttemptStore):
             pkce_advertised=(r.auth or {}).get("pkce_advertised", True),
             redirect_uri=r.redirect_uri,
             token_endpoint=r.token_endpoint,
-            destination=r.destination,
+            destinations=tuple(r.destinations or []),
             created_at=r.created_at,
             expires_at=r.expires_at,
             used_at=r.used_at,
@@ -120,13 +152,13 @@ _SAVED_FIELDS = [
     "participant",
     "participant_secrets_enc",
     "source",
-    "destination",
+    "destinations",
     "credentials_enc",
     "token_expires_at",
     "outcomes",
     "documents",
     "spool_ref",
-    "receipt",
+    "deliveries",
     "failure",
     "attempts",
     "finished_at",
@@ -139,13 +171,13 @@ def _apply(job: m.Job, r: JobRecord) -> JobRecord:
     r.participant = participant_to_json(job.participant)
     r.participant_secrets_enc = encrypt_secrets(job.participant.secrets)
     r.source = asdict(job.source)
-    r.destination = job.destination
+    r.destinations = list(job.destinations)
     r.credentials_enc = encrypt_secrets(job.credentials)
     r.token_expires_at = job.token_expires_at
     r.outcomes = [asdict(o) for o in job.outcomes]
     r.documents = asdict(job.documents)
     r.spool_ref = job.spool_ref
-    r.receipt = asdict(job.receipt) if job.receipt else None
+    r.deliveries = deliveries_to_json(job.deliveries)
     r.failure = job.failure
     r.attempts = job.attempts
     r.finished_at = job.finished_at
@@ -157,14 +189,14 @@ def job_from_record(r: JobRecord) -> m.Job:
         id=r.id,
         participant=participant_from_json(r.participant, r.participant_secrets_enc),
         source=m.Source(**r.source),
-        destination=r.destination,
+        destinations=tuple(r.destinations or []),
         status=m.JobStatus(r.status),
         credentials=decrypt_secrets(r.credentials_enc),
         token_expires_at=r.token_expires_at,
         outcomes=[m.TypeOutcome(**o) for o in r.outcomes],
         documents=m.DocumentOutcome(**(r.documents or {})),
         spool_ref=r.spool_ref,
-        receipt=_receipt_from_json(r.receipt),
+        deliveries=deliveries_from_json(r.deliveries),
         failure=r.failure,
         attempts=r.attempts,
         created_at=r.created_at,

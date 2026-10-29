@@ -9,6 +9,7 @@ from typing import Protocol, runtime_checkable
 from .models import (
     AuthAttempt,
     BlobMeta,
+    ContentPolicy,
     Endpoint,
     ImportCounts,
     InboundRequest,
@@ -128,7 +129,17 @@ class Spool(Protocol):
 class Formatter(Protocol):
     produces: frozenset[str]
 
-    def format(self, spool: SpoolHandle, job: Job) -> Iterator[Unit]: ...
+    def format(self, spool: SpoolHandle, job: Job, content: ContentPolicy) -> Iterator[Unit]:
+        """Units for one destination, honouring its content policy (types and documents)."""
+        ...
+
+
+class DestinationResolver(Protocol):
+    def resolve(self, job: Job) -> tuple[str, ...]:
+        """Which configured destinations this job delivers to, asked at delivery time so a
+        consent added while the job was queued is picked up. The result is unioned with what the
+        launch recorded on the job."""
+        ...
 
 
 class SinkSession(Protocol):

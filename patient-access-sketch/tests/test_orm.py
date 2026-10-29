@@ -17,7 +17,7 @@ def _job(**kw):
         id="",
         participant=Participant(ref="p1", provider="static", attrs={"arm": "a"}, secrets=Secrets({"jhe": "t0k"})),
         source=source(scopes_requested=["s"], scopes_granted=["s"]),
-        destination="local",
+        destinations=("local",),
         **kw,
     )
 
@@ -32,12 +32,14 @@ def test_round_trip_and_encryption():
     assert got.credentials["ehr_access_token"] == "SECRET-EHR"
     assert got.participant.secrets["jhe"] == "t0k"
     got.outcomes = [TypeOutcome("Labs", "Observation", "Observation?category=laboratory", "ok", 3)]
-    got.receipt = Receipt(destination="local", location="x", resources=3)
+    got.delivery("local").receipt = Receipt(destination="local", location="x", resources=3)
+    got.delivery("local").status = "done"
     got.status = JobStatus.DONE
     got.finished_at = datetime.now(UTC)
     store.save(got)
     again = store.get(job_id)
-    assert again.status == JobStatus.DONE and again.outcomes[0].count == 3 and again.receipt.resources == 3
+    assert again.status == JobStatus.DONE and again.outcomes[0].count == 3
+    assert again.deliveries["local"].status == "done" and again.deliveries["local"].receipt.resources == 3
 
 
 def test_claimer_leases_once_and_reclaims_stale():

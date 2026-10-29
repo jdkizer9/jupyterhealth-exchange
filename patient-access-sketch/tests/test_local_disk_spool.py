@@ -11,7 +11,7 @@ def _job():
         id="job-1",
         participant=Participant(ref="p", provider="static"),
         source=source(),
-        destination="d",
+        destinations=("d",),
     )
 
 

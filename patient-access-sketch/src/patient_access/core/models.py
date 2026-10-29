@@ -155,7 +155,7 @@ class AuthAttempt:
     scopes: list[str]
     redirect_uri: str
     token_endpoint: str
-    destination: str
+    destinations: tuple[str, ...]  # resolved at launch; the resolver may add more at delivery
     created_at: datetime
     expires_at: datetime
     used_at: datetime | None = None
@@ -285,12 +285,14 @@ class Source:
 
 @dataclass
 class TypeOutcome:
-    """Phase 4 result for one row of the vendor's query table."""
+    """Phase 4 result for one row of the vendor's query table. Every row of the table appears,
+    so the receipt says what was withheld: `not_requested` (the patient left it unchecked),
+    `not_granted` (requested, the EHR withheld the scope)."""
 
     label: str
     resource_type: str
     query: str
-    status: str = "pending"  # pending | ok | error | skipped
+    status: str = "pending"  # pending | ok | error | skipped | not_requested | not_granted
     count: int = 0
     pages: int = 0
     bytes: int = 0
@@ -325,12 +327,44 @@ class Receipt:
     details: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ContentPolicy:
+    """What a destination takes (design §14). A formatter is handed this and leaves the rest out:
+    excluded types are not emitted; with `documents=False` attachments keep their original URLs
+    and no blob travels with the unit."""
+
+    documents: bool = True
+    resource_types: frozenset[str] | None = None  # allow-list; None means every type
+    exclude_types: frozenset[str] = frozenset()
+
+    def takes(self, resource_type: str) -> bool:
+        if resource_type in self.exclude_types:
+            return False
+        return self.resource_types is None or resource_type in self.resource_types
+
+
+@dataclass
+class Delivery:
+    """One destination's share of a job (design §14): its own attempts, receipt and failure."""
+
+    status: str = "pending"  # pending | delivering | done | failed | failed_terminal
+    attempts: int = 0
+    receipt: Receipt | None = None
+    failure: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    @property
+    def terminal(self) -> bool:
+        return self.status in ("done", "failed_terminal")
+
+
 @dataclass
 class Job:
     id: JobId
     participant: Participant
     source: Source
-    destination: str  # name of a configured Destination
+    destinations: tuple[str, ...]  # names of configured Destinations, each delivered on its own
     status: JobStatus = JobStatus.QUEUED
     # EHR access token and the spool data key. Encrypted at rest by the JobStore; cleared at a
     # terminal state (and the EHR token as soon as the fetch ends).
@@ -339,15 +373,22 @@ class Job:
     outcomes: list[TypeOutcome] = field(default_factory=list)
     documents: DocumentOutcome = field(default_factory=DocumentOutcome)
     spool_ref: str | None = None
-    receipt: Receipt | None = None
+    deliveries: dict[str, Delivery] = field(default_factory=dict)  # by destination name
     failure: str | None = None
-    attempts: int = 0
+    attempts: int = 0  # delivery rounds; per-destination counts live on each Delivery
     created_at: datetime | None = None
     updated_at: datetime | None = None
     finished_at: datetime | None = None
 
     def outcome(self, label: str) -> TypeOutcome | None:
         return next((o for o in self.outcomes if o.label == label), None)
+
+    def delivery(self, name: str) -> Delivery:
+        return self.deliveries.setdefault(name, Delivery())
+
+    @property
+    def receipts(self) -> dict[str, Receipt]:
+        return {name: d.receipt for name, d in self.deliveries.items() if d.receipt}
 
 
 # --- spool, formatter, sink -------------------------------------------------------------------

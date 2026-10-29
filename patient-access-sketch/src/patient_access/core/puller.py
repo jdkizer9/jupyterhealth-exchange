@@ -25,6 +25,10 @@ from .source_settings import FetchProfile, QuerySpec, SourceSettings
 
 log = logging.getLogger(__name__)
 
+# Outcome statuses decided at the callback (§14 scope accounting): nothing to fetch for them.
+WITHHELD = ("not_requested", "not_granted")
+SETTLED = ("ok", "skipped", *WITHHELD)
+
 EXPIRY_MARGIN = timedelta(seconds=30)
 SAVE_EVERY_PAGES = 5
 
@@ -155,15 +159,18 @@ def fetch(
     started = time.monotonic()
     expired = False
     for resource_type, outcomes in by_type.items():
-        if all(o.status in ("ok", "skipped") for o in outcomes):
+        if all(o.status in SETTLED for o in outcomes):
             continue
         if expired:
             for o in outcomes:
-                o.status, o.error = "error", "authorization expired before this was downloaded"
+                if o.status not in WITHHELD:
+                    o.status, o.error = "error", "authorization expired before this was downloaded"
             continue
         spool.reset_type(resource_type)
         seen: set[str] = set()
         for o in outcomes:
+            if o.status in WITHHELD:
+                continue  # not_requested / not_granted: decided at the callback, nothing to fetch
             o.status, o.count, o.pages, o.bytes, o.error, o.capped = "pending", 0, 0, 0, None, False
             spec = specs.get(o.label)
             if spec is None:

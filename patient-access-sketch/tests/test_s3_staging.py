@@ -41,7 +41,7 @@ def _job():
         id=f"t-{uuid.uuid4().hex[:8]}",
         participant=Participant("p", "s"),
         source=source(),
-        destination="d",
+        destinations=("d",),
     )
 
 

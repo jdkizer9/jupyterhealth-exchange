@@ -26,6 +26,7 @@ from patient_access.core.models import (
     AuthAttempt,
     BlobMeta,
     Brand,
+    ContentPolicy,
     Endpoint,
     Facility,
     ImportCounts,
@@ -270,8 +271,11 @@ class PassthroughFormatter(Formatter):
 
     produces = frozenset({"collection"})
 
-    def format(self, spool, job: Job) -> Iterator[Unit]:
+    def format(self, spool, job: Job, content: ContentPolicy | None = None) -> Iterator[Unit]:
+        content = content or ContentPolicy()
         for resource_type, count in sorted(spool.index().types.items()):
+            if not content.takes(resource_type):
+                continue
             entries = [{"resource": r} for r in spool.iter_type(resource_type)]
             yield Unit(
                 name=resource_type,

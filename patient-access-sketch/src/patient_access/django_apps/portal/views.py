@@ -120,7 +120,7 @@ def launch(request: HttpRequest) -> HttpResponse:
             keyring=m.keyring,
             attempts=m.auth_attempts,
             redirect_uri=m.redirect_uri,
-            destination=m.default_destination,
+            destinations=m.default_destinations,
             http=m.http,
             clock=m.clock,
         )
@@ -194,7 +194,15 @@ def _job_json(job) -> dict:
             for o in job.outcomes
         ],
         "documents": vars(job.documents),
-        "receipt": vars(job.receipt) if job.receipt else None,
+        "deliveries": {
+            name: {
+                "status": d.status,
+                "attempts": d.attempts,
+                "failure": d.failure,
+                "receipt": vars(d.receipt) if d.receipt else None,
+            }
+            for name, d in job.deliveries.items()
+        },
         "failure": job.failure,
         "attempts": job.attempts,
     }

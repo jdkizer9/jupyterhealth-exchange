@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from patient_access.core.interfaces import Formatter, SpoolHandle
-from patient_access.core.models import BlobRef, Job, Unit
+from patient_access.core.models import BlobRef, ContentPolicy, Job, Unit
 
 NS = uuid.UUID("6f1c7d0e-3b0a-4c5e-9a57-1d2c0b7e9a10")
 ORIGINAL_URL_EXT = "https://jupyterhealth.org/fhir/StructureDefinition/original-attachment-url"
@@ -71,10 +71,10 @@ class CompositionBundleFormatter(Formatter):
     def __init__(self, author_name: str = "Patient Access Module"):
         self.author_name = author_name
 
-    def format(self, spool: SpoolHandle, job: Job) -> Iterator[Unit]:
+    def format(self, spool: SpoolHandle, job: Job, content: ContentPolicy) -> Iterator[Unit]:
         iss = job.source.iss.rstrip("/")
         index_info = spool.index()
-        types = [t for t in index_info.types if index_info.types[t]]
+        types = [t for t in index_info.types if index_info.types[t] and content.takes(t)]
         # Pass 1: ids only, to know what references can be resolved inside the bundle.
         index: dict[str, str] = {}
         for t in types:
@@ -93,9 +93,11 @@ class CompositionBundleFormatter(Formatter):
         for t in types:
             for r in spool.iter_type(t):
                 r = _rewrite_refs(r, index, iss)
-                if t == "DocumentReference":
+                # Without documents the attachments keep their original URLs (on the EHR) and
+                # no blob travels with the unit.
+                if t == "DocumentReference" and content.documents:
                     r = self._point_at_sidecars(r, "content", blob_meta, blobs)
-                elif t == "DiagnosticReport":
+                elif t == "DiagnosticReport" and content.documents:
                     r = self._point_at_sidecars(r, "presentedForm", blob_meta, blobs)
                 full = index.get(f"{t}/{r.get('id')}") or f"urn:uuid:{uuid.uuid4()}"
                 entries.append({"fullUrl": full, "resource": r})
@@ -133,7 +135,7 @@ class CompositionBundleFormatter(Formatter):
             ],
         }
         yield Unit(name="bundle", kind="document", body=bundle, blobs=blobs, resources=count)
-        yield Unit(name="metadata", kind="metadata", body=self.metadata(job, count, blobs, now))
+        yield Unit(name="metadata", kind="metadata", body=self.metadata(job, count, blobs, now, content))
 
     @staticmethod
     def _point_at_sidecars(r: dict, field: str, blob_meta: dict, blobs: list[BlobRef]) -> dict:
@@ -154,9 +156,14 @@ class CompositionBundleFormatter(Formatter):
         return r
 
     @staticmethod
-    def metadata(job: Job, count: int, blobs: list[BlobRef], now: str) -> dict:
+    def metadata(job: Job, count: int, blobs: list[BlobRef], now: str, content: ContentPolicy) -> dict:
         return {
             "job": job.id,
+            "content": {
+                "documents": content.documents,
+                "resource_types": sorted(content.resource_types) if content.resource_types else None,
+                "exclude_types": sorted(content.exclude_types),
+            },
             "participant": {
                 "ref": job.participant.ref,
                 "provider": job.participant.provider,
@@ -174,6 +181,10 @@ class CompositionBundleFormatter(Formatter):
                 "scopes_requested": job.source.scopes_requested,
                 "scopes_granted": job.source.scopes_granted,
                 "scopes_declined": job.source.scopes_declined,
+                "scopes_not_granted": sorted(
+                    {s for s in job.source.scopes_requested if s.startswith("patient/")}
+                    - set(job.source.scopes_granted)
+                ),
             },
             "generated_at": now,
             "resources": count,

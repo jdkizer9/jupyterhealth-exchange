@@ -12,10 +12,30 @@ from .interfaces import AuthAttemptStore, Directory, IdentityError, IdentityProv
 from .models import Job, JobId, Participant, Secrets, Source, TypeOutcome
 from .pipeline import EHR_TOKEN
 from .smart import SmartError, begin, exchange_code
+from .source_settings import SourceSettings, to_v2
 
 
 class FlowError(Exception):
     """Safe to show the patient."""
+
+
+def plan_outcomes(settings: SourceSettings, requested: list[str], granted: list[str]) -> list[TypeOutcome]:
+    """One outcome per row of the query table, so the receipt says what was withheld and why:
+    `not_requested` when the patient left the type unchecked, `not_granted` when the EHR withheld
+    a requested scope, `pending` for what the puller will fetch (§14 scope accounting)."""
+    requested_set = set(requested) | {to_v2(s) for s in requested}
+    fetchable = {q.label for q in settings.queries_for(granted)}
+    out = []
+    for q in settings.fetch.queries:
+        o = TypeOutcome(label=q.label, resource_type=q.resource_type, query=q.query)
+        if q.label in fetchable:
+            pass
+        elif q.scope in requested_set or to_v2(q.scope) in requested_set:
+            o.status, o.error = "not_granted", "the organization did not grant access to this type"
+        else:
+            o.status, o.error = "not_requested", "not selected by the patient"
+        out.append(o)
+    return out
 
 
 def start_upstream_auth(
@@ -26,7 +46,7 @@ def start_upstream_auth(
     keyring: Keyring,
     attempts: AuthAttemptStore,
     redirect_uri: str,
-    destination: str,
+    destinations: tuple[str, ...],
     http: requests.Session,
     clock: Callable[[], datetime],
     scopes: list[str] | None = None,
@@ -47,7 +67,7 @@ def start_upstream_auth(
             settings=settings,
             keyring=keyring,
             redirect_uri=redirect_uri,
-            destination=destination,
+            destinations=destinations,
             attempts=attempts,
             http=http,
             clock=clock,
@@ -107,13 +127,10 @@ def finish_upstream_auth(
             auth_method=attempt.auth_method,
             key_id=attempt.key_id,
         ),
-        destination=attempt.destination,
+        destinations=attempt.destinations,
         credentials=Secrets({EHR_TOKEN: token.access_token}),
         token_expires_at=token.expires_at,
-        outcomes=[
-            TypeOutcome(label=q.label, resource_type=q.resource_type, query=q.query)
-            for q in settings.queries_for(token.scopes_granted)
-        ],
+        outcomes=plan_outcomes(settings, attempt.scopes, token.scopes_granted),
         created_at=clock(),
     )
     job_id = jobs.create(job)

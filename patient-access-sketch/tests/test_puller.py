@@ -67,7 +67,7 @@ def _job(expires=None):
         id="j",
         participant=Participant("p", "static"),
         source=source(selection(iss=BASE), scopes_granted=["patient/*.read"]),
-        destination="d",
+        destinations=("d",),
         credentials=Secrets({EHR_TOKEN: "tok"}),
         token_expires_at=expires or datetime.now(UTC) + timedelta(hours=1),
     )

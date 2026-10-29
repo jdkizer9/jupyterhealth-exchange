@@ -36,9 +36,10 @@ from patient_access.core.interfaces import (
     JobStore,
     Spool,
 )
-from patient_access.core.pipeline import Deps, Destination, run_job, utcnow
+from patient_access.core.models import ContentPolicy
+from patient_access.core.pipeline import Deps, Destination, StaticResolver, run_job, utcnow
 from patient_access.core.puller import fetch
-from patient_access.core.source_settings import SourceSettings, load_vendors
+from patient_access.core.source_settings import ConfigError, SourceSettings, load_vendors
 
 from .stores import OrmAuthAttemptStore, OrmJobClaimer, OrmJobStore
 
@@ -90,7 +91,7 @@ class Module:
     jobs: JobStore
     spool: Spool
     destinations: dict[str, Destination]
-    default_destination: str
+    default_destinations: tuple[str, ...]  # what a launch records; the resolver may add at delivery
     dispatcher: JobDispatcher
     vendors: dict[str, SourceSettings]
     keyring: Keyring  # signing keys and secrets; the host serves keyring.keys.public_jwks()
@@ -127,15 +128,40 @@ def get_module() -> Module:
     )
     destinations = {}
     for name, d in (config.get("destinations") or {}).items():
+        content = _subst(d.get("content") or {})
         destinations[name] = Destination(
-            name=name, formatter=build(d["formatter"], services), sink=build(d["sink"], services)
+            name=name,
+            formatter=build(d["formatter"], services),
+            sink=build(d["sink"], services),
+            required=bool(d.get("required", True)),
+            content=ContentPolicy(
+                documents=bool(content.get("documents", True)),
+                resource_types=frozenset(content["resource_types"]) if content.get("resource_types") else None,
+                exclude_types=frozenset(content.get("exclude_types") or ()),
+            ),
         )
+    # `default_destinations` (list) or the older `default_destination` (one name).
+    default_destinations = tuple(
+        _subst(config.get("default_destinations") or [config["default_destination"]])
+        if "default_destination" in config or "default_destinations" in config
+        else ()
+    )
+    unknown = set(default_destinations) - set(destinations)
+    if unknown:
+        raise ConfigError(f"default_destinations names unconfigured destinations {sorted(unknown)}")
     jobs = OrmJobStore()
     spool = build(config["spool"], services)
     directory = build(config["directory"], services)
     max_attempts = int(config.get("max_attempts", 3))
+    resolver = build(config["destination_resolver"], services) if "destination_resolver" in config else StaticResolver()
     deps = Deps(
-        jobs=jobs, spool=spool, destinations=destinations, directory=directory, fetch=fetch, max_attempts=max_attempts
+        jobs=jobs,
+        spool=spool,
+        destinations=destinations,
+        directory=directory,
+        fetch=fetch,
+        max_attempts=max_attempts,
+        resolver=resolver,
     )
     module = Module(
         config=config,
@@ -145,7 +171,7 @@ def get_module() -> Module:
         jobs=jobs,
         spool=spool,
         destinations=destinations,
-        default_destination=_subst(config["default_destination"]),
+        default_destinations=default_destinations,
         dispatcher=_Unset(),  # replaced below: InlineDispatcher needs the module's `run`, which needs the module
         vendors=vendors,
         keyring=keyring,

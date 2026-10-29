@@ -13,7 +13,7 @@ def _job(ref="P-1", attrs=None):
         id="j1",
         participant=Participant(ref, "x", attrs=attrs or {}),
         source=source(selection(vendor="epic", iss="https://e/fhir", customer_id="org-9"), ehr_patient_id="pat"),
-        destination="d",
+        destinations=("d",),
         created_at=datetime(2026, 10, 22, tzinfo=UTC),
     )
 

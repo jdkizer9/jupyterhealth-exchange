@@ -21,15 +21,19 @@
     document.getElementById("failure").textContent = job.failure || "";
     document.querySelector("#outcomes tbody").innerHTML = job.outcomes.map(o =>
       `<tr><td>${esc(o.label)}</td><td class="${o.status === "error" ? "bad" : o.status === "ok" ? "ok" : ""}">${esc(o.status)}${o.capped ? " (capped)" : ""}${o.error ? " · " + esc(o.error) : ""}</td><td>${esc(o.count)}</td></tr>`).join("");
-    if (job.receipt) {
-      const r = job.receipt;
-      document.getElementById("receipt").innerHTML = `<h2>Receipt</h2><table>
-        <tr><th>Delivered to</th><td id="receipt-location">${esc(r.destination)}: ${esc(r.location)}</td></tr>
-        <tr><th>Records</th><td id="receipt-resources">${esc(r.resources)}</td></tr>
+    const deliveries = Object.entries(job.deliveries || {});
+    if (deliveries.length) {
+      document.getElementById("receipt").innerHTML = deliveries.map(([name, d]) => {
+        const r = d.receipt;
+        if (!r) return `<h2>Delivery: ${esc(name)}</h2><p class="${d.status === "failed_terminal" ? "bad" : ""}">${esc(d.status)}${d.failure ? " · " + esc(d.failure) : ""}</p>`;
+        return `<h2>Receipt: ${esc(name)}</h2><table>
+        <tr><th>Delivered to</th><td class="receipt-location">${esc(r.destination)}: ${esc(r.location)}</td></tr>
+        <tr><th>Records</th><td class="receipt-resources">${esc(r.resources)}</td></tr>
         <tr><th>Documents</th><td>${esc(r.blobs)}</td></tr>
         <tr><th>Size</th><td>${esc(r.bytes)} bytes</td></tr>
         ${Object.keys(r.failures || {}).length ? `<tr><th>Not accepted</th><td>${Object.entries(r.failures).map(([k, v]) => esc(v) + " × " + esc(k)).join("<br>")}</td></tr>` : ""}
       </table>`;
+      }).join("");
     }
   }
   const initial = JSON.parse(document.getElementById("job-data").textContent);

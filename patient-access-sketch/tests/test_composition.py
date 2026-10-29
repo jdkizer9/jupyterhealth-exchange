@@ -61,7 +61,7 @@ def test_document_bundle_on_disk(tmp_path):
             id="j1",
             participant=Participant("P/../1", "static", attrs={"arm": "A"}),
             source=source(selection(iss=ISS)),
-            destination="local",
+            destinations=("local",),
             credentials=Secrets({EHR_TOKEN: "t"}),
             token_expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
@@ -82,4 +82,5 @@ def test_document_bundle_on_disk(tmp_path):
     assert (out / "docs" / "DocumentReference-d1-0").read_bytes() == b"note text"
     meta = json.loads((out / "metadata.json").read_text())
     assert meta["participant"]["attrs"] == {"arm": "A"} and meta["documents"]["items"][0]["sha256"] == "abc"
-    assert job.receipt.blobs == 1 and job.receipt.resources == 3
+    receipt = job.deliveries["local"].receipt
+    assert receipt.blobs == 1 and receipt.resources == 3
