@@ -40,13 +40,18 @@ class S3Sink(Sink):
         self.layout = KeyLayout(layout)
         self.sse = sse
         self.kms_key_id = kms_key_id
+        # No keys given: boto3's default chain (AWS_* env, shared config, the compute's IAM role).
+        # Path-style addressing only for a custom endpoint (Silo/MinIO); AWS itself prefers virtual-hosted.
         self.client = boto3.client(
             "s3",
             endpoint_url=endpoint_url or None,
-            region_name=region,
+            region_name=region or None,
             aws_access_key_id=access_key or None,
             aws_secret_access_key=secret_key or None,
-            config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 5, "mode": "standard"}),
+            config=Config(
+                s3={"addressing_style": "path" if endpoint_url else "auto"},
+                retries={"max_attempts": 5, "mode": "standard"},
+            ),
         )
         self.create_bucket = create_bucket
         self._ready = False

@@ -106,9 +106,13 @@ PATIENT_ACCESS = {
                 "class": "patient_access.destinations.s3.S3Sink",
                 "options": {
                     "bucket": os.getenv("PATIENT_ACCESS_S3_BUCKET"),
-                    "endpoint_url": os.getenv("PATIENT_ACCESS_S3_ENDPOINT_URL"),
+                    "endpoint_url": os.getenv("PATIENT_ACCESS_S3_ENDPOINT_URL"),  # unset for AWS itself
+                    "region": os.getenv("PATIENT_ACCESS_S3_REGION", "us-east-1"),
+                    # Both unset: boto3's default chain, i.e. the compute's IAM role on AWS.
                     "access_key": os.getenv("PATIENT_ACCESS_S3_ACCESS_KEY_ID"),
                     "secret_key": os.getenv("PATIENT_ACCESS_S3_SECRET_ACCESS_KEY"),
+                    "sse": os.getenv("PATIENT_ACCESS_S3_SSE"),  # "AES256" or "aws:kms"
+                    "kms_key_id": os.getenv("PATIENT_ACCESS_S3_KMS_KEY_ID"),
                     "layout": "{attrs[patient_id]}/{attrs[fhir_source_id]}/{created_at:%Y%m%dT%H%M%SZ}",
                     "create_bucket": bool(os.getenv("PATIENT_ACCESS_S3_CREATE_BUCKET")),
                 },
