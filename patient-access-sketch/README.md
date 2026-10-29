@@ -20,7 +20,7 @@ screens for scripted runs; the others show the real login and approve screens.
 | variant | how |
 |---|---|
 | deliver to `local/out/` instead of Silo | `PA_DESTINATION=local docker compose up -d` |
-| spool in Silo instead of local disk | `PA_CONFIG=/code/compose/dev-config-s3spool.json docker compose up -d` |
+| spool in Silo instead of local disk | `PA_VARIANT=s3spool docker compose up -d` |
 | Dramatiq + Redis instead of DB polling | `docker compose -f docker-compose.yml -f docker-compose.dramatiq.yml up -d --build` |
 | scenario B: deliver into the JHE dev stack | start JHE (repo root `docker compose up -d`), run `scripts/jhe-setup.sh`, `export PA_JHE_DATA_SOURCE_ID=<printed id>`, then `docker compose -f docker-compose.yml -f docker-compose.jhe.yml up -d` and open the printed invitation link |
 
@@ -33,5 +33,5 @@ Every value in the compose files and `compose/` is a public, local-only dev valu
 `identity/`, `formatters/`, `destinations/`, `spool/` and `dispatch/`, and `testing/` holds
 in-memory versions of everything. `django_apps/` is the only Django code, split into separately
 installable apps (`jobs` required; `directory`, `deeplink`, `portal` optional) so a host installs
-only the tables it uses. `server/` is the minimal standalone host, which installs all four. `compose/dev-config*.json` are deployment configs (plugs, options, vendors,
-query tables); variants `extend` the base.
+only the tables it uses. `server/` is the minimal standalone host, which installs all four. its `PATIENT_ACCESS` settings dict (plugs, options, vendors) is built by
+`server/patient_access_config.py` per `PA_VARIANT`, the way a reusable Django app is configured.

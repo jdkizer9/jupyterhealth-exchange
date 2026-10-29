@@ -1,4 +1,0 @@
-{
-  "extends": "/code/compose/dev-config.json",
-  "dispatcher": {"class": "patient_access.dispatch.thread.ThreadDispatcher", "options": {"lease_seconds": 600}}
-}

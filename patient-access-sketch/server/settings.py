@@ -73,10 +73,11 @@ STATIC_URL = "static/"
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
-# The module's deployment config: which plugs, their options, vendors and query tables.
-PATIENT_ACCESS_CONFIG = env("PA_CONFIG")
-# Fernet key for credentials at rest.
-PATIENT_ACCESS_DEPLOYMENT_KEY = env("PA_DEPLOYMENT_KEY")
+# The module's settings (a reusable app's dict; see patient_access/django_apps/jobs/conf.py).
+# PA_VARIANT picks a dev variant: default, s3spool, thread, dramatiq, jhe.
+from server.patient_access_config import patient_access_config  # noqa: E402
+
+PATIENT_ACCESS = patient_access_config(os.environ.get("PA_VARIANT", "default"))
 
 LOGGING = {
     "version": 1,

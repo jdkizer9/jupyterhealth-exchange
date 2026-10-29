@@ -12,7 +12,7 @@ services:
 
   web:
     environment:
-      PA_CONFIG: /code/compose/dev-config-dramatiq.json
+      PA_VARIANT: dramatiq
       PA_DRAMATIQ_REDIS_URL: redis://redis:6379/0
     depends_on:
       redis:
@@ -21,7 +21,7 @@ services:
   worker:
     command: ["dramatiq", "patient_access.django_apps.jobs.dramatiq_worker", "--processes", "1", "--threads", "2"]
     environment:
-      PA_CONFIG: /code/compose/dev-config-dramatiq.json
+      PA_VARIANT: dramatiq
       PA_DRAMATIQ_REDIS_URL: redis://redis:6379/0
     depends_on:
       redis:

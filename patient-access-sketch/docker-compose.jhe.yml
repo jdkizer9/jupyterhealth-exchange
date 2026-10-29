@@ -8,7 +8,7 @@
 # the browser only ever sees http://localhost:8080 (the sketch) and the EHR.
 
 x-pa-jhe: &pa-jhe
-  PA_CONFIG: /code/compose/dev-config-jhe.json
+  PA_VARIANT: jhe
   PA_JHE_URL: http://jhe:${JHE_PORT:-8000}
   PA_JHE_PUBLIC_HOST: localhost:${JHE_PORT:-8000}
   # Written by scripts/jhe-setup.sh: the "EHR Patient Portal" DataSource id in your JHE database.

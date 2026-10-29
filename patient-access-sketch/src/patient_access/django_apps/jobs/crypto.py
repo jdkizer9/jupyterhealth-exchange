@@ -4,14 +4,15 @@ import json
 from functools import cache
 
 from cryptography.fernet import Fernet
-from django.conf import settings
 
 from patient_access.core.models import Secrets
+
+from .conf import patient_access_settings
 
 
 @cache
 def _fernet() -> Fernet:
-    return Fernet(settings.PATIENT_ACCESS_DEPLOYMENT_KEY.encode())
+    return Fernet(patient_access_settings.DEPLOYMENT_KEY.encode())
 
 
 def encrypt_str(value: str) -> str:

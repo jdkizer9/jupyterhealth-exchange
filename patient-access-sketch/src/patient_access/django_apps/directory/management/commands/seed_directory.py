@@ -8,7 +8,8 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
-from patient_access.django_apps.jobs.wiring import _subst, get_module, load_config
+from patient_access.django_apps.jobs.conf import patient_access_settings
+from patient_access.django_apps.jobs.wiring import get_module
 from patient_access.testing.smart_sandbox import SandboxConfig, jwks_from_public_pem
 
 from ...brands import brands_bundle
@@ -16,11 +17,10 @@ from ...models import EhrBrand
 
 
 class Command(BaseCommand):
-    help = "Seed the directory from the deployment config's `seed` section."
+    help = 'Seed the directory from PATIENT_ACCESS["SEED"].'
 
     def handle(self, *args, **options):
-        config = load_config()
-        seed = _subst(config.get("seed") or {})
+        seed = patient_access_settings.SEED
         module = get_module()
         for b in seed.get("bundles", []):
             counts = module.directory.upsert_brands_bundle(json.loads(Path(b["file"]).read_text()), b["vendor"])
