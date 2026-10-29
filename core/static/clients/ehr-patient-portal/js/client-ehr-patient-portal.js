@@ -144,17 +144,33 @@ function eppTypeLine(t) {
   if (t.status === "ok") return `${t.label}: ${t.count} record(s)`;
   if (t.status === "failed" || t.status === "error") return `${t.label}: could not fetch${t.error ? ` (${t.error})` : ""}`;
   if (t.status === "skipped") return `${t.label}: skipped`;
+  if (t.status === "not_requested") return `${t.label}: not selected`;
+  if (t.status === "not_granted") return `${t.label}: not shared by your organization`;
   return `${t.label}: waiting…`;
 }
 
-// The importing screen's text for a job: the organization, each type's progress, and what was saved.
+// Patient-facing names for destinations; anything else shows its configured name.
+const EPP_DESTINATION_LABELS = { jhe: "JupyterHealth", s3: "your study's secure storage" };
+
+// One line per destination: what was saved there, or where it stands.
+function eppDeliveryLine(name, d) {
+  const where = EPP_DESTINATION_LABELS[name] || name;
+  if (d.receipt) {
+    const extra = d.receipt.rejected ? ` (${d.receipt.rejected} could not be saved)` : "";
+    return `Saved ${d.receipt.resources} record(s) to ${where}.${extra}`;
+  }
+  if (d.status === "failed") return `Saving to ${where} hit a problem; retrying automatically.`;
+  if (d.status === "failed_terminal") return `Saving to ${where} did not succeed.`;
+  if (d.status === "delivering") return `Saving to ${where}…`;
+  return `Waiting to save to ${where}.`;
+}
+
+// The importing screen's text for a job: the organization, each type's progress, and what was saved where.
 function eppJobText(job) {
   const lines = [`Connected to ${job.source.brand}`, ""].concat(job.types.map(eppTypeLine));
-  if (job.status === "failed") lines.push("", "Saving hit a problem; retrying automatically.");
-  if (job.receipt) {
-    lines.push("", `Saved ${job.receipt.resources} record(s) to JupyterHealth.`);
-    if (job.receipt.rejected) lines.push(`${job.receipt.rejected} record(s) could not be saved.`);
-  }
+  const deliveries = Object.entries(job.deliveries || {});
+  if (deliveries.length) lines.push("", ...deliveries.map(([name, d]) => eppDeliveryLine(name, d)));
+  else if (job.status === "failed") lines.push("", "Saving hit a problem; retrying automatically.");
   return lines.join("\n");
 }
 
@@ -212,6 +228,7 @@ if (typeof window !== "undefined") {
   window.eppRenderBrandResults = eppRenderBrandResults;
   window.eppRenderScopePicker = eppRenderScopePicker;
   window.eppTypeLine = eppTypeLine;
+  window.eppDeliveryLine = eppDeliveryLine;
   window.eppJobText = eppJobText;
   window.eppProgressCopy = eppProgressCopy;
   window.eppStatus = eppStatus;

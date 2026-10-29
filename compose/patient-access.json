@@ -22,10 +22,29 @@
       },
       "sink": {
         "class": "core.patient_access.sink.JheDirectSink"
+      },
+      "content": {
+        "documents": false
       }
+    },
+    "s3": {
+      "formatter": {
+        "class": "patient_access.formatters.composition.CompositionBundleFormatter"
+      },
+      "sink": {
+        "class": "patient_access.destinations.s3.S3Sink",
+        "options": {
+          "bucket": "patient-access",
+          "layout": "pulls/{participant.ref}/{job.id}",
+          "endpoint_url": "http://silo:9000",
+          "access_key": "patient-access-dev",
+          "secret_key": "patient-access-dev-secret",
+          "create_bucket": true
+        }
+      },
+      "required": true
     }
   },
-  "default_destination": "jhe",
   "dispatcher": {
     "class": "patient_access.dispatch.thread.ThreadDispatcher",
     "options": {
@@ -144,5 +163,9 @@
         }
       ]
     }
-  }
+  },
+  "default_destinations": [
+    "jhe",
+    "s3"
+  ]
 }

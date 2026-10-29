@@ -27,7 +27,10 @@ const JOB = {
     { label: "Labs", status: "ok", count: 12, error: null },
     { label: "Devices", status: "failed", count: 0, error: "403" },
   ],
-  receipt: { resources: 12, rejected: 1, failures: {}, warnings: {}, fhirSourceId: 3 },
+  deliveries: {
+    jhe: { status: "done", attempts: 1, failure: null, receipt: { resources: 12, rejected: 1, failures: {}, warnings: {}, fhirSourceId: 3 } },
+    s3: { status: "done", attempts: 1, failure: null, receipt: { resources: 13, rejected: 0, failures: {}, warnings: {}, fhirSourceId: null } },
+  },
   failure: null,
 };
 
@@ -52,13 +55,20 @@ describe("eppJobText", () => {
     expect(text).toContain("Connected to SMART Sandbox Health");
     expect(text).toContain("Labs: 12 record(s)");
     expect(text).toContain("Devices: could not fetch (403)");
-    expect(text).toContain("Saved 12 record(s) to JupyterHealth.");
-    expect(text).toContain("1 record(s) could not be saved.");
+    expect(text).toContain("Saved 12 record(s) to JupyterHealth. (1 could not be saved)");
+    expect(text).toContain("Saved 13 record(s) to your study's secure storage.");
   });
 
-  test("says a failed delivery is being retried", () => {
-    const text = window.eppJobText({ ...JOB, status: "failed", terminal: false, receipt: null });
-    expect(text).toContain("retrying automatically");
+  test("says which delivery is being retried", () => {
+    const deliveries = { ...JOB.deliveries, s3: { status: "failed", attempts: 1, failure: "boom", receipt: null } };
+    const text = window.eppJobText({ ...JOB, status: "failed", terminal: false, deliveries });
+    expect(text).toContain("Saved 12 record(s) to JupyterHealth.");
+    expect(text).toContain("Saving to your study's secure storage hit a problem; retrying automatically.");
+  });
+
+  test("explains types the patient left out or the organization withheld", () => {
+    expect(window.eppTypeLine({ label: "Goals", status: "not_requested" })).toBe("Goals: not selected");
+    expect(window.eppTypeLine({ label: "Devices", status: "not_granted" })).toBe("Devices: not shared by your organization");
   });
 });
 
@@ -96,7 +106,7 @@ describe("the status route", () => {
   });
 
   test("shows the job's failure with a way back to the picker when it fails for good", async () => {
-    global.fetch = jobFetch({ ...JOB, status: "failed_terminal", receipt: null, failure: "The authorization has expired." });
+    global.fetch = jobFetch({ ...JOB, status: "failed_terminal", deliveries: {}, failure: "The authorization has expired." });
 
     await window.eppStatus({ job: "j1", source: "5" });
 

@@ -49,7 +49,7 @@ def launch(request):
             scopes_declined=[s for s in offered if s not in scopes],
             attempts=m.auth_attempts,
             redirect_uri=m.redirect_uri,
-            destination=m.default_destination,
+            destinations=m.default_destinations,
             http=m.http,
             clock=m.clock,
             scopes=scopes,
@@ -59,8 +59,21 @@ def launch(request):
     return Response({"authorize_url": url})
 
 
+def _receipt_json(receipt):
+    return {
+        "destination": receipt.destination,
+        "location": receipt.location,
+        "resources": receipt.resources,
+        "rejected": receipt.details.get("rejected", 0),
+        "blobs": receipt.blobs,
+        "bytes": receipt.bytes,
+        "failures": receipt.failures,
+        "warnings": receipt.warnings,
+        "fhir_source_id": receipt.details.get("fhir_source_id"),
+    }
+
+
 def job_json(job):
-    receipt = job.receipt
     return {
         "id": job.id,
         "status": str(job.status),
@@ -68,17 +81,16 @@ def job_json(job):
         "data_source_id": job.participant.attrs.get("data_source_id"),
         "source": {"brand": job.source.brand_name, "location": job.source.facility_name},
         "types": [{"label": o.label, "status": o.status, "count": o.count, "error": o.error} for o in job.outcomes],
-        "receipt": (
-            {
-                "resources": receipt.resources,
-                "rejected": receipt.details.get("rejected", 0),
-                "failures": receipt.failures,
-                "warnings": receipt.warnings,
-                "fhir_source_id": receipt.details.get("fhir_source_id"),
+        # One entry per destination (design §14): JHE's import and the study's S3 bucket each report.
+        "deliveries": {
+            name: {
+                "status": d.status,
+                "attempts": d.attempts,
+                "failure": d.failure,
+                "receipt": _receipt_json(d.receipt) if d.receipt else None,
             }
-            if receipt
-            else None
-        ),
+            for name, d in job.deliveries.items()
+        },
         "failure": job.failure,
     }
 
