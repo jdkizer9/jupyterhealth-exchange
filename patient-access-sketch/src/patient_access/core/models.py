@@ -77,20 +77,62 @@ class Participant:
 
 
 @dataclass(frozen=True)
-class Location:
-    """A row the patient can pick: a care facility under a brand, which carries the SMART iss."""
+class Endpoint:
+    """A FHIR server a brand connects through (the SMART `iss`). `customer` is the installation
+    behind it (Epic's `Endpoint.managingOrganization`): one authorization server, where a vendor
+    registers per-customer credentials, and where site-specific behaviour belongs. Vendors that do
+    not identify installations leave it empty."""
+
+    id: str
+    iss: str
+    vendor: str  # key into the registrations: "Epic Production"
+    fhir_version: str | None = None
+    customer_id: str | None = None
+    customer_name: str | None = None
+
+
+@dataclass(frozen=True)
+class Brand:
+    """The patient-recognisable organisation (a User-access Brands `Organization` with an endpoint)."""
+
+    id: str
+    name: str
+    endpoint: Endpoint
+    npi: str | None = None  # NPI type 2, when the vendor publishes one
+
+
+@dataclass(frozen=True)
+class Facility:
+    """A care location under a brand (an `Organization` with `partOf`): what the patient searches by."""
 
     id: str
     name: str
     address: str
-    city: str | None
-    state: str | None
-    postal_code: str | None
-    brand_id: str
-    brand_name: str
-    iss: str
-    vendor: str
-    brand_npi: str | None = None  # NPI type 2 from the Brands Bundle, when the vendor publishes one
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+
+
+@dataclass(frozen=True)
+class Selection:
+    """One picker row, and what the patient chose: a brand, at a facility when it has any.
+    `id` is opaque to core; the directory knows whether it names a facility or a brand."""
+
+    id: str
+    brand: Brand
+    facility: Facility | None = None
+
+    @property
+    def name(self) -> str:
+        return self.facility.name if self.facility else self.brand.name
+
+    @property
+    def address(self) -> str:
+        return self.facility.address if self.facility else ""
+
+    @property
+    def endpoint(self) -> Endpoint:
+        return self.brand.endpoint
 
 
 @dataclass(frozen=True)
@@ -109,9 +151,7 @@ class AuthAttempt:
     state: str
     code_verifier: str
     participant: Participant
-    location_id: str
-    vendor: str
-    iss: str
+    selection: Selection  # as a value: a brands re-import between launch and callback cannot strand it
     scopes: list[str]
     redirect_uri: str
     token_endpoint: str
@@ -119,6 +159,16 @@ class AuthAttempt:
     created_at: datetime
     expires_at: datetime
     used_at: datetime | None = None
+    # Offered at the checklist and left unchecked, so the receipt can say what the patient declined.
+    scopes_declined: list[str] = field(default_factory=list)
+
+    @property
+    def vendor(self) -> str:
+        return self.selection.endpoint.vendor
+
+    @property
+    def iss(self) -> str:
+        return self.selection.endpoint.iss
 
 
 @dataclass
@@ -150,18 +200,64 @@ class JobStatus(enum.StrEnum):
 
 @dataclass
 class Source:
-    """Where the data comes from, fixed at the end of phase 3."""
+    """Where the data comes from, fixed at the end of phase 3. Carries the Endpoint's fields as
+    values so the worker can ask the directory for settings without a row that may be gone."""
 
     vendor: str
     iss: str
     brand_name: str
-    location_id: str
-    location_name: str
     scopes_requested: list[str]
     scopes_granted: list[str]
     ehr_patient_id: str
     brand_id: str = ""
     brand_npi: str | None = None
+    facility_id: str | None = None
+    facility_name: str = ""
+    endpoint_id: str = ""
+    fhir_version: str | None = None
+    customer_id: str | None = None
+    customer_name: str | None = None
+    scopes_declined: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_selection(
+        cls,
+        sel: Selection,
+        *,
+        scopes_requested: list[str],
+        scopes_granted: list[str],
+        ehr_patient_id: str,
+        scopes_declined: list[str] | None = None,
+    ) -> Source:
+        ep = sel.endpoint
+        return cls(
+            vendor=ep.vendor,
+            iss=ep.iss,
+            brand_name=sel.brand.name,
+            scopes_requested=scopes_requested,
+            scopes_granted=scopes_granted,
+            ehr_patient_id=ehr_patient_id,
+            brand_id=sel.brand.id,
+            brand_npi=sel.brand.npi,
+            facility_id=sel.facility.id if sel.facility else None,
+            facility_name=sel.facility.name if sel.facility else "",
+            endpoint_id=ep.id,
+            fhir_version=ep.fhir_version,
+            customer_id=ep.customer_id,
+            customer_name=ep.customer_name,
+            scopes_declined=list(scopes_declined or []),
+        )
+
+    @property
+    def endpoint(self) -> Endpoint:
+        return Endpoint(
+            id=self.endpoint_id,
+            iss=self.iss,
+            vendor=self.vendor,
+            fhir_version=self.fhir_version,
+            customer_id=self.customer_id,
+            customer_name=self.customer_name,
+        )
 
     @property
     def id(self) -> str:

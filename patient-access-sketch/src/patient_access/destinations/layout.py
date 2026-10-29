@@ -5,8 +5,8 @@
 
 Available roots: `participant` (ref, provider), `attrs` (whatever the identity provider put in
 Participant.attrs, e.g. the deep link's `attrs` claim), `job` (id), `source` (`id`: a stable,
-path-safe health-system identifier, NPI-based when known; also vendor, brand_name, location_id,
-ehr_patient_id), `created_at` (datetime). Each `/`-separated segment is rendered and
+path-safe health-system identifier, NPI-based when known; also vendor, brand_name, facility_id,
+customer_id, ehr_patient_id), `created_at` (datetime). Each `/`-separated segment is rendered and
 sanitised on its own, so no value can add or escape a prefix. Unknown roots fail at
 configuration time; a missing attribute fails the pull before anything is written.
 """
@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from patient_access.core.models import Job
-from patient_access.core.vendors import ConfigError
+from patient_access.core.source_settings import ConfigError
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]")
 ROOTS = {"participant", "attrs", "job", "source", "created_at"}

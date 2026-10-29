@@ -7,7 +7,8 @@ from datetime import timedelta
 
 import pytest
 
-from patient_access.core.models import BlobMeta, Job, Participant, Source
+from patient_access.core.models import BlobMeta, Job, Participant
+from patient_access.testing.memory import source
 
 
 def _silo_up() -> bool:
@@ -39,7 +40,7 @@ def _job():
     return Job(
         id=f"t-{uuid.uuid4().hex[:8]}",
         participant=Participant("p", "s"),
-        source=Source("v", "i", "b", "1", "l", [], [], "x"),
+        source=source(),
         destination="d",
     )
 

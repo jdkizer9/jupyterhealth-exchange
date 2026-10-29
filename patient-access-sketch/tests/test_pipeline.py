@@ -4,25 +4,29 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from patient_access.core.models import Job, JobStatus, Participant, Source, TypeOutcome
+from patient_access.core.models import Job, JobStatus, Participant, TypeOutcome
 from patient_access.core.pipeline import EHR_TOKEN, SPOOL_KEY, Deps, Destination, FetchAborted, run_job
-from patient_access.core.vendors import ConfigError, QuerySpec, VendorConfig
-from patient_access.testing.memory import InMemoryJobStore, InMemorySpool, MemorySink, PassthroughFormatter
+from patient_access.core.source_settings import ConfigError, QuerySpec
+from patient_access.testing.memory import (
+    InMemoryDirectory,
+    InMemoryJobStore,
+    InMemorySpool,
+    MemorySink,
+    PassthroughFormatter,
+    settings,
+    source,
+)
 
 NOW = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 
-VENDOR = VendorConfig(
-    name="v",
-    client_id="c",
-    auth_method="public",
+SETTINGS = settings(
+    "v",
+    (QuerySpec(label="Conditions", resource_type="Condition", query="Condition", scope="patient/Condition.read"),),
     base_scopes=("launch/patient",),
-    queries=(
-        QuerySpec(label="Conditions", resource_type="Condition", query="Condition", scope="patient/Condition.read"),
-    ),
 )
 
 
-def fake_fetch(job, spool, vendor, save):
+def fake_fetch(job, spool, settings, save):
     outcome = TypeOutcome(label="Conditions", resource_type="Condition", query="Condition")
     job.outcomes = [outcome]
     for i in range(3):
@@ -38,14 +42,14 @@ def make(sink=None, fetch=fake_fetch, expires=NOW + timedelta(hours=1)):
         jobs=jobs,
         spool=spool,
         destinations={"mem": Destination("mem", PassthroughFormatter(), sink)},
-        vendors={"v": VENDOR},
+        directory=InMemoryDirectory(settings={"v": SETTINGS}),
         fetch=fetch,
         clock=lambda: NOW,
     )
     job = Job(
         id="j1",
         participant=Participant(ref="p1", provider="static"),
-        source=Source("v", "https://ehr/fhir", "Brand", "1", "Clinic", [], [], "pat-1"),
+        source=source(),
         destination="mem",
         token_expires_at=expires,
     )

@@ -37,7 +37,7 @@ from patient_access.core.interfaces import (
 )
 from patient_access.core.pipeline import Deps, Destination, run_job, utcnow
 from patient_access.core.puller import fetch
-from patient_access.core.vendors import VendorConfig, load_vendors
+from patient_access.core.source_settings import SourceSettings, load_vendors
 
 from .stores import OrmAuthAttemptStore, OrmJobClaimer, OrmJobStore
 
@@ -91,7 +91,7 @@ class Module:
     destinations: dict[str, Destination]
     default_destination: str
     dispatcher: JobDispatcher
-    vendors: dict[str, VendorConfig]
+    vendors: dict[str, SourceSettings]
     deps: Deps
     claimer: OrmJobClaimer
     site_url: str
@@ -116,7 +116,7 @@ def load_config(path: str | None = None) -> dict:
 def get_module() -> Module:
     config = load_config()
     services: dict[str, Any] = {"site_url": settings.SITE_URL}
-    vendors = load_vendors(_subst({"vendors": config.get("vendors"), "query_tables": config.get("query_tables")}))
+    vendors = load_vendors(_subst({"vendors": config.get("vendors")}))
     services["vendors"] = vendors
     destinations = {}
     for name, d in (config.get("destinations") or {}).items():
@@ -125,14 +125,15 @@ def get_module() -> Module:
         )
     jobs = OrmJobStore()
     spool = build(config["spool"], services)
+    directory = build(config["directory"], services)
     max_attempts = int(config.get("max_attempts", 3))
     deps = Deps(
-        jobs=jobs, spool=spool, destinations=destinations, vendors=vendors, fetch=fetch, max_attempts=max_attempts
+        jobs=jobs, spool=spool, destinations=destinations, directory=directory, fetch=fetch, max_attempts=max_attempts
     )
     module = Module(
         config=config,
         identity=build(config["identity"], services),
-        directory=build(config["directory"], services),
+        directory=directory,
         auth_attempts=OrmAuthAttemptStore(),
         jobs=jobs,
         spool=spool,

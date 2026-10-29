@@ -5,11 +5,11 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from patient_access.core.documents import fetch_documents
-from patient_access.core.models import Job, Participant, Secrets, Source
+from patient_access.core.models import Job, Participant, Secrets
 from patient_access.core.pipeline import EHR_TOKEN
 from patient_access.core.puller import FhirClient
-from patient_access.core.vendors import DocumentPolicy, VendorConfig
-from patient_access.testing.memory import InMemorySpool
+from patient_access.core.source_settings import DocumentPolicy
+from patient_access.testing.memory import InMemorySpool, selection, settings, source
 
 BASE = "https://ehr.example/fhir"
 
@@ -47,11 +47,11 @@ class FakeEhr:
 
 
 def _setup(policy):
-    vendor = VendorConfig("v", "c", "public", (), (), documents=policy)
+    vendor = settings("v", documents=policy).fetch
     job = Job(
         id="j",
         participant=Participant("p", "s"),
-        source=Source("v", BASE, "B", "1", "L", [], [], "pat"),
+        source=source(selection(iss=BASE), ehr_patient_id="pat"),
         destination="d",
         credentials=Secrets({EHR_TOKEN: "t"}),
         token_expires_at=datetime.now(UTC) + timedelta(hours=1),

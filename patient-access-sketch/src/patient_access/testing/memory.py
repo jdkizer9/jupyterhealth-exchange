@@ -6,6 +6,7 @@ import copy
 import json
 import uuid
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from patient_access.core.interfaces import (
@@ -23,16 +24,27 @@ from patient_access.core.interfaces import (
 from patient_access.core.models import (
     AuthAttempt,
     BlobMeta,
+    Brand,
+    Endpoint,
+    Facility,
     ImportCounts,
     InboundRequest,
     Job,
     JobId,
-    Location,
     Participant,
     Receipt,
+    Selection,
+    Source,
     SpoolIndex,
     Unit,
     UnitOutcome,
+)
+from patient_access.core.source_settings import (
+    ClientRegistration,
+    FetchProfile,
+    QuerySpec,
+    SourceSettings,
+    apply_overrides,
 )
 
 
@@ -56,25 +68,92 @@ class StaticIdentity(IdentityProvider):
 
 
 class InMemoryDirectory(Directory):
-    def __init__(self, locations: list[Location] | None = None):
-        self.locations = {loc.id: loc for loc in locations or []}
+    """Selections and vendor settings given directly; `overrides` narrows a profile per customer id."""
 
-    def search(self, q: str, state: str | None = None, postal: str | None = None, limit: int = 25) -> list[Location]:
+    def __init__(
+        self,
+        selections: list[Selection] | None = None,
+        settings: dict[str, SourceSettings] | None = None,
+        overrides: dict[str, dict] | None = None,
+    ):
+        self.selections = {s.id: s for s in selections or []}
+        self.settings = dict(settings or {})
+        self.overrides = dict(overrides or {})
+
+    def search(self, q: str, state: str | None = None, postal: str | None = None, limit: int = 25) -> list[Selection]:
         q = (q or "").lower()
         out = [
-            loc
-            for loc in self.locations.values()
-            if (not q or q in loc.name.lower() or q in loc.brand_name.lower() or q in (loc.city or "").lower())
-            and (not state or loc.state == state)
-            and (not postal or (loc.postal_code or "").startswith(postal))
+            s
+            for s in self.selections.values()
+            if (
+                not q
+                or q in s.name.lower()
+                or q in s.brand.name.lower()
+                or q in ((s.facility and s.facility.city) or "").lower()
+            )
+            and (not state or (s.facility and s.facility.state == state))
+            and (not postal or ((s.facility and s.facility.postal_code) or "").startswith(postal))
         ]
-        return sorted(out, key=lambda loc: loc.name)[:limit]
+        return sorted(out, key=lambda s: s.name)[:limit]
 
-    def location(self, location_id: str) -> Location:
-        return self.locations[location_id]
+    def selection(self, selection_id: str) -> Selection:
+        return self.selections[selection_id]
+
+    def settings_for(self, endpoint: Endpoint) -> SourceSettings:
+        base = self.settings[endpoint.vendor]
+        override = self.overrides.get(endpoint.customer_id or "")
+        return replace(base, fetch=apply_overrides(base.fetch, override)) if override else base
 
     def upsert_brands_bundle(self, bundle: dict, vendor: str) -> ImportCounts:
         raise NotImplementedError("the in-memory directory is seeded directly")
+
+
+def selection(
+    sid: str = "sel-1",
+    *,
+    vendor: str = "v",
+    iss: str = "https://ehr.example/fhir",
+    brand: str = "Brand",
+    facility: str | None = "Clinic",
+    customer_id: str | None = None,
+) -> Selection:
+    """A test Selection: brand on an endpoint, at a facility unless facility=None."""
+    ep = Endpoint(id=f"{sid}-ep", iss=iss, vendor=vendor, customer_id=customer_id)
+    return Selection(
+        id=sid,
+        brand=Brand(id=f"{sid}-b", name=brand, endpoint=ep),
+        facility=Facility(
+            id=f"{sid}-f", name=facility, address="1 Main St", city="Boston", state="MA", postal_code="02115"
+        )
+        if facility
+        else None,
+    )
+
+
+def settings(vendor: str = "v", queries: tuple[QuerySpec, ...] = (), **kw) -> SourceSettings:
+    """Test SourceSettings: a public registration and a profile of `queries`; `kw` go to FetchProfile
+    (page_cap, documents, ...) or, for auth_method / client_id / scope_version / base_scopes, to the registration."""
+    reg_keys = {
+        "client_id",
+        "auth_method",
+        "scope_version",
+        "base_scopes",
+        "client_secret",
+        "private_key_pem",
+        "key_id",
+        "jwt_alg",
+    }
+    reg = {k: kw.pop(k) for k in list(kw) if k in reg_keys}
+    return SourceSettings(
+        registration=ClientRegistration(vendor=vendor, client_id=reg.pop("client_id", "c"), **reg),
+        fetch=FetchProfile(name="test", queries=queries, **kw),
+    )
+
+
+def source(sel: Selection | None = None, **kw) -> Source:
+    """A test Source from a Selection (default `selection()`), with empty scopes and patient "pat-1"."""
+    args = {"scopes_requested": [], "scopes_granted": [], "ehr_patient_id": "pat-1", **kw}
+    return Source.from_selection(sel or selection(), **args)
 
 
 class InMemoryAuthAttemptStore(AuthAttemptStore):

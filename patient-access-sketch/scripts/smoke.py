@@ -50,7 +50,7 @@ def main() -> int:
     t0 = time.time()
     r = s.post(
         f"{BASE}/launch",
-        data={"location_id": location["id"], "csrfmiddlewaretoken": csrf},
+        data={"selection_id": location["id"], "csrfmiddlewaretoken": csrf},
         allow_redirects=False,
         timeout=60,
     )

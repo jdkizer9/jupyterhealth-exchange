@@ -14,9 +14,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .interfaces import Formatter, JobStore, Sink, Spool, SpoolHandle
+from .interfaces import Directory, Formatter, JobStore, Sink, Spool, SpoolHandle
 from .models import Job, JobId, JobStatus, Receipt
-from .vendors import ConfigError, VendorConfig
+from .source_settings import ConfigError, SourceSettings
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +41,9 @@ class Destination:
             )
 
 
-# fetch(job, spool, vendor, save) fills the spool and records outcomes on the job; `save` persists
+# fetch(job, spool, settings, save) fills the spool and records outcomes on the job; `save` persists
 # progress. Core's puller is the real one; tests pass a fake.
-FetchFn = Callable[[Job, SpoolHandle, VendorConfig, Callable[[], None]], None]
+FetchFn = Callable[[Job, SpoolHandle, SourceSettings, Callable[[], None]], None]
 
 
 def utcnow() -> datetime:
@@ -55,7 +55,7 @@ class Deps:
     jobs: JobStore
     spool: Spool
     destinations: Mapping[str, Destination]
-    vendors: Mapping[str, VendorConfig]
+    directory: Directory  # for settings_for: the fetch profile is looked up per run, never stored
     fetch: FetchFn
     clock: Callable[[], datetime] = utcnow
     max_attempts: int = 3
@@ -128,15 +128,16 @@ def _fetch(job: Job, handle: SpoolHandle, deps: Deps) -> None:
     if EHR_TOKEN not in job.credentials or (job.token_expires_at and job.token_expires_at <= now):
         _fail_terminal(job, deps, "The EHR authorization expired before the download finished. Please connect again.")
         return
-    vendor = deps.vendors.get(job.source.vendor)
-    if vendor is None:
+    try:
+        settings = deps.directory.settings_for(job.source.endpoint)
+    except KeyError:
         _fail_terminal(job, deps, f"vendor {job.source.vendor!r} is not configured")
         return
     job.status = JobStatus.FETCHING
     deps.jobs.save(job)
     deps.on_event(job, "fetch.start")
     try:
-        deps.fetch(job, handle, vendor, lambda: deps.jobs.save(job))
+        deps.fetch(job, handle, settings, lambda: deps.jobs.save(job))
     except FetchAborted as e:
         _fail_terminal(job, deps, str(e))
         return

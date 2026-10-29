@@ -1,15 +1,16 @@
 import os
 from datetime import timedelta
 
-from patient_access.core.models import BlobMeta, Job, Participant, Source
+from patient_access.core.models import BlobMeta, Job, Participant
 from patient_access.spool.local_disk import LocalDiskSpool
+from patient_access.testing.memory import source
 
 
 def _job():
     return Job(
         id="job-1",
         participant=Participant(ref="p", provider="static"),
-        source=Source("v", "i", "b", "1", "l", [], [], "pat"),
+        source=source(),
         destination="d",
     )
 

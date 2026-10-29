@@ -9,17 +9,19 @@ from typing import Protocol, runtime_checkable
 from .models import (
     AuthAttempt,
     BlobMeta,
+    Endpoint,
     ImportCounts,
     InboundRequest,
     Job,
     JobId,
-    Location,
     Participant,
     Receipt,
+    Selection,
     SpoolIndex,
     Unit,
     UnitOutcome,
 )
+from .source_settings import SourceSettings
 
 
 class IdentityError(Exception):
@@ -41,12 +43,22 @@ class IdentityProvider(Protocol):
 
 
 class Directory(Protocol):
+    """Who the patient can connect to, and how (design §10.8). Shaped like the SMART User-access
+    Brands format: facilities under brands, brands on endpoints, endpoints under a customer and a
+    vendor. Vendor settings are part of it: `settings_for` is the one place the layering of
+    registration, profile and overrides is visible."""
+
     def search(
         self, q: str, state: str | None = None, postal: str | None = None, limit: int = 25
-    ) -> list[Location]: ...
+    ) -> list[Selection]: ...
 
-    def location(self, location_id: str) -> Location:
+    def selection(self, selection_id: str) -> Selection:
         """Raises KeyError."""
+        ...
+
+    def settings_for(self, endpoint: Endpoint) -> SourceSettings:
+        """Registration and fetch profile for an endpoint, overrides merged. Raises KeyError when
+        the endpoint's vendor has no registration."""
         ...
 
     def upsert_brands_bundle(self, bundle: dict, vendor: str) -> ImportCounts: ...

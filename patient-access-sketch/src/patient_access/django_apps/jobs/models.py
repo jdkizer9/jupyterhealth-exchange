@@ -17,10 +17,9 @@ class AuthAttemptRecord(models.Model):
     code_verifier_enc = models.TextField()
     participant = models.JSONField()  # ref, provider, attrs, handle
     participant_secrets_enc = models.TextField(blank=True, default="")
-    location_id = models.CharField()
-    vendor = models.CharField()
-    iss = models.TextField()
+    selection = models.JSONField()  # Selection as a value: brand, endpoint, facility
     scopes = models.JSONField()
+    scopes_declined = models.JSONField(default=list)
     redirect_uri = models.TextField()
     token_endpoint = models.TextField()
     destination = models.CharField()

@@ -19,8 +19,8 @@ import jwt
 import requests
 
 from .interfaces import AuthAttemptStore
-from .models import AuthAttempt, Location, Participant, TokenResponse
-from .vendors import VendorConfig
+from .models import AuthAttempt, Participant, Selection, TokenResponse
+from .source_settings import ClientRegistration, SourceSettings
 
 ATTEMPT_TTL = timedelta(minutes=10)
 ASSERTION_TTL_SECONDS = 300  # SMART Backend Services: exp no more than 5 minutes out
@@ -71,73 +71,84 @@ def _pkce() -> tuple[str, str]:
 def begin(
     *,
     participant: Participant,
-    location: Location,
-    vendor: VendorConfig,
+    selection: Selection,
+    settings: SourceSettings,
     redirect_uri: str,
     destination: str,
     attempts: AuthAttemptStore,
     http: requests.Session,
     clock: Callable[[], datetime],
     scopes: list[str] | None = None,
+    scopes_declined: list[str] | None = None,
 ) -> str:
     """Discover, record the attempt, return the authorize URL to redirect the browser to."""
-    config = discover(location.iss, http, vendor.timeout_seconds)
-    if vendor.auth_method == "private_key_jwt" and config.auth_methods and "private_key_jwt" not in config.auth_methods:
+    registration = settings.registration
+    iss = selection.endpoint.iss
+    config = discover(iss, http, settings.fetch.timeout_seconds)
+    if (
+        registration.auth_method == "private_key_jwt"
+        and config.auth_methods
+        and "private_key_jwt" not in config.auth_methods
+    ):
         raise SmartError("This organization does not support the sign-in method this service is registered with.")
     verifier, challenge = _pkce()
     state = secrets.token_urlsafe(32)
-    scope_list = vendor.scopes(scopes)
+    scope_list = settings.scopes(scopes)
     now = clock()
     attempts.create(
         AuthAttempt(
             state=state,
             code_verifier=verifier,
             participant=participant,
-            location_id=location.id,
-            vendor=vendor.name,
-            iss=location.iss,
+            selection=selection,
             scopes=scope_list,
             redirect_uri=redirect_uri,
             token_endpoint=config.token_endpoint,
             destination=destination,
             created_at=now,
             expires_at=now + ATTEMPT_TTL,
+            scopes_declined=list(scopes_declined or []),
         )
     )
     params = {
         "response_type": "code",
-        "client_id": vendor.client_id,
+        "client_id": registration.client_id,
         "redirect_uri": redirect_uri,
         "scope": " ".join(scope_list),  # `scope`, not `scopes` (jupyter-smart-on-fhir hub_service.py bug)
         "state": state,
-        "aud": location.iss,
+        "aud": iss,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
     }
     return f"{config.authorization_endpoint}?{urlencode(params)}"
 
 
-def client_assertion(vendor: VendorConfig, token_endpoint: str, now: int | None = None) -> str:
-    """private_key_jwt per SMART Backend Services: unique jti, exp <= 5 min, vendor's algorithm."""
+def client_assertion(reg: ClientRegistration, token_endpoint: str, now: int | None = None) -> str:
+    """private_key_jwt per SMART Backend Services: unique jti, exp <= 5 min, the registration's algorithm."""
     now = int(time.time()) if now is None else now
     claims = {
-        "iss": vendor.client_id,
-        "sub": vendor.client_id,
+        "iss": reg.client_id,
+        "sub": reg.client_id,
         "aud": token_endpoint,
         "jti": secrets.token_urlsafe(24),  # jupyter-smart-on-fhir sends the constant "jwt_id"
         "iat": now,
         "exp": now + ASSERTION_TTL_SECONDS,  # it sends 3600
     }
-    if not vendor.private_key_pem:
-        raise SmartError(f"vendor {vendor.name} has no private key for private_key_jwt")
-    headers = {"kid": vendor.key_id} if vendor.key_id else None
-    return jwt.encode(claims, vendor.private_key_pem, algorithm=vendor.jwt_alg, headers=headers)
+    if not reg.private_key_pem:
+        raise SmartError(f"vendor {reg.vendor} has no private key for private_key_jwt")
+    headers = {"kid": reg.key_id} if reg.key_id else None
+    return jwt.encode(claims, reg.private_key_pem, algorithm=reg.jwt_alg, headers=headers)
 
 
 def exchange_code(
-    attempt: AuthAttempt, code: str, vendor: VendorConfig, http: requests.Session, clock: Callable[[], datetime]
+    attempt: AuthAttempt,
+    code: str,
+    settings: SourceSettings,
+    http: requests.Session,
+    clock: Callable[[], datetime],
 ) -> TokenResponse:
-    """POST the code (with the PKCE verifier and the vendor's client authentication)."""
+    """POST the code (with the PKCE verifier and the registration's client authentication)."""
+    vendor = settings.registration
     data = {
         "grant_type": "authorization_code",
         "code": code,
@@ -162,7 +173,7 @@ def exchange_code(
             data=data,
             auth=auth,
             headers={"Accept": "application/json"},
-            timeout=vendor.timeout_seconds,
+            timeout=settings.fetch.timeout_seconds,
         )
     except requests.RequestException as e:
         raise SmartError(f"The organization's sign-in service did not respond ({type(e).__name__}).") from e

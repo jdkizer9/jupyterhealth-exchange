@@ -8,13 +8,13 @@
   <input type="submit" value="Search">
 </form>
 {% if q or state %}
-  {% for loc in results %}
+  {% for sel in results %}
   <div class="card">
-    <strong>{{ loc.name }}</strong>{% if loc.name != loc.brand_name %} <span class="muted">· {{ loc.brand_name }}</span>{% endif %}<br>
-    <span class="muted">{{ loc.address }}</span>
+    <strong>{{ sel.name }}</strong>{% if sel.name != sel.brand.name %} <span class="muted">· {{ sel.brand.name }}</span>{% endif %}<br>
+    <span class="muted">{{ sel.address }}</span>
     <form method="post" action="{% url 'patient_access:launch' %}" class="inline">
-      {% csrf_token %}<input type="hidden" name="location_id" value="{{ loc.id }}">
-      <button type="submit" data-location="{{ loc.id }}">Connect</button>
+      {% csrf_token %}<input type="hidden" name="selection_id" value="{{ sel.id }}">
+      <button type="submit" data-location="{{ sel.id }}">Connect</button>
     </form>
   </div>
   {% empty %}

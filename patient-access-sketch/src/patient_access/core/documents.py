@@ -25,7 +25,7 @@ import requests
 
 from .interfaces import SpoolHandle
 from .models import BlobMeta, Job
-from .vendors import DocumentPolicy, VendorConfig
+from .source_settings import DocumentPolicy, FetchProfile
 
 if TYPE_CHECKING:
     from .puller import FhirClient
@@ -65,7 +65,7 @@ def _download(client: FhirClient, url: str, ctype: str, max_bytes: int) -> tuple
         # Never send the EHR token to another host.
         return "url outside the FHIR server"
     client.ensure_valid()
-    r = client.http.get(url, headers={"Accept": ctype or "*/*"}, timeout=client.vendor.timeout_seconds, stream=True)
+    r = client.http.get(url, headers={"Accept": ctype or "*/*"}, timeout=client.profile.timeout_seconds, stream=True)
     client.requests += 1
     try:
         if r.status_code != 200:
@@ -98,9 +98,9 @@ def _download(client: FhirClient, url: str, ctype: str, max_bytes: int) -> tuple
 
 
 def fetch_documents(
-    job: Job, spool: SpoolHandle, vendor: VendorConfig, client: FhirClient, save: Callable[[], None]
+    job: Job, spool: SpoolHandle, profile: FetchProfile, client: FhirClient, save: Callable[[], None]
 ) -> None:
-    policy, out = vendor.documents, job.documents
+    policy, out = profile.documents, job.documents
     if not policy.enabled:
         out.status = "skipped"
         save()

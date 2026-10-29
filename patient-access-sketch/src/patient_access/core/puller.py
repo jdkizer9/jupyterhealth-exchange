@@ -21,7 +21,7 @@ from .http import session as http_session
 from .interfaces import SpoolHandle
 from .models import Job, TypeOutcome
 from .pipeline import EHR_TOKEN, FetchAborted
-from .vendors import QuerySpec, VendorConfig
+from .source_settings import FetchProfile, QuerySpec, SourceSettings
 
 log = logging.getLogger(__name__)
 
@@ -40,14 +40,14 @@ class FhirClient:
         self,
         base: str,
         token: str,
-        vendor: VendorConfig,
+        profile: FetchProfile,
         expires_at: datetime | None,
         http: requests.Session | None = None,
     ):
         self.base = base.rstrip("/")
-        self.vendor = vendor
+        self.profile = profile
         self.expires_at = expires_at
-        self.http = http or http_session(vendor.max_retries)
+        self.http = http or http_session(profile.max_retries)
         self.http.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/fhir+json"})
         self.requests = 0
 
@@ -58,7 +58,7 @@ class FhirClient:
     def get(self, url: str, params: dict | None = None) -> requests.Response:
         self.ensure_valid()
         self.requests += 1
-        r = self.http.get(url, params=params, timeout=self.vendor.timeout_seconds)
+        r = self.http.get(url, params=params, timeout=self.profile.timeout_seconds)
         if r.status_code == 401:
             raise FetchAborted("The health system stopped accepting our access (401). Please connect again.")
         return r
@@ -98,10 +98,10 @@ def _pull(
 ) -> None:
     url: str | None
     params: dict | None
-    url, params = _search_url(client.base, spec, patient, client.vendor.page_size)
+    url, params = _search_url(client.base, spec, patient, client.profile.page_size)
     started = time.monotonic()
     while url:
-        if outcome.pages >= client.vendor.page_cap:
+        if outcome.pages >= client.profile.page_cap:
             outcome.capped = True
             break
         r = client.get(url, params)
@@ -135,11 +135,15 @@ def _pull(
 
 
 def fetch(
-    job: Job, spool: SpoolHandle, vendor: VendorConfig, save: Callable[[], None], http: requests.Session | None = None
+    job: Job,
+    spool: SpoolHandle,
+    settings: SourceSettings,
+    save: Callable[[], None],
+    http: requests.Session | None = None,
 ) -> None:
-    client = FhirClient(job.source.iss, job.credentials[EHR_TOKEN], vendor, job.token_expires_at, http)
+    client = FhirClient(job.source.iss, job.credentials[EHR_TOKEN], settings.fetch, job.token_expires_at, http)
     patient = job.source.ehr_patient_id
-    specs = {q.label: q for q in vendor.queries_for(job.source.scopes_granted)}
+    specs = {q.label: q for q in settings.queries_for(job.source.scopes_granted)}
     if not job.outcomes:
         job.outcomes = [TypeOutcome(q.label, q.resource_type, q.query) for q in specs.values()]
 
@@ -179,7 +183,7 @@ def fetch(
         save()
 
     if not expired:
-        fetch_documents(job, spool, vendor, client, save)
+        fetch_documents(job, spool, settings.fetch, client, save)
     log.info(
         "job %s fetched %d resources in %d requests, %.1fs",
         job.id,

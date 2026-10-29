@@ -3,17 +3,23 @@
 import json
 from datetime import UTC, datetime, timedelta
 
-from patient_access.core.models import BlobMeta, Job, Participant, Secrets, Source, TypeOutcome
+from patient_access.core.models import BlobMeta, Job, Participant, Secrets, TypeOutcome
 from patient_access.core.pipeline import EHR_TOKEN, Deps, Destination, run_job
-from patient_access.core.vendors import VendorConfig
 from patient_access.destinations.local_dir import LocalDirectorySink
 from patient_access.formatters.composition import ORIGINAL_URL_EXT, CompositionBundleFormatter, urn
-from patient_access.testing.memory import InMemoryJobStore, InMemorySpool
+from patient_access.testing.memory import (
+    InMemoryDirectory,
+    InMemoryJobStore,
+    InMemorySpool,
+    selection,
+    settings,
+    source,
+)
 
 ISS = "https://ehr.example/fhir"
 
 
-def fake_fetch(job, spool, vendor, save):
+def fake_fetch(job, spool, settings, save):
     spool.append("Patient", {"resourceType": "Patient", "id": "pat-1"})
     spool.append(
         "Observation",
@@ -46,7 +52,7 @@ def test_document_bundle_on_disk(tmp_path):
     deps = Deps(
         jobs=jobs,
         spool=InMemorySpool(),
-        vendors={"v": VendorConfig("v", "c", "public", (), ())},
+        directory=InMemoryDirectory(settings={"v": settings("v")}),
         fetch=fake_fetch,
         destinations={"local": Destination("local", CompositionBundleFormatter(), LocalDirectorySink(str(tmp_path)))},
     )
@@ -54,7 +60,7 @@ def test_document_bundle_on_disk(tmp_path):
         Job(
             id="j1",
             participant=Participant("P/../1", "static", attrs={"arm": "A"}),
-            source=Source("v", ISS, "Brand", "1", "Clinic", [], [], "pat-1"),
+            source=source(selection(iss=ISS)),
             destination="local",
             credentials=Secrets({EHR_TOKEN: "t"}),
             token_expires_at=datetime.now(UTC) + timedelta(hours=1),

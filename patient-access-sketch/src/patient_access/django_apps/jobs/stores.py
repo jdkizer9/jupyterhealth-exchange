@@ -40,6 +40,20 @@ def _receipt_from_json(d: dict | None) -> m.Receipt | None:
     return m.Receipt(**d) if d else None
 
 
+def selection_to_json(sel: m.Selection) -> dict:
+    return asdict(sel)
+
+
+def selection_from_json(d: dict) -> m.Selection:
+    brand = d["brand"]
+    facility = d.get("facility")
+    return m.Selection(
+        id=d["id"],
+        brand=m.Brand(**{**brand, "endpoint": m.Endpoint(**brand["endpoint"])}),
+        facility=m.Facility(**facility) if facility else None,
+    )
+
+
 # --- phase 3 ----------------------------------------------------------------------------------
 
 
@@ -50,10 +64,9 @@ class OrmAuthAttemptStore(AuthAttemptStore):
             code_verifier_enc=encrypt_str(a.code_verifier),
             participant=participant_to_json(a.participant),
             participant_secrets_enc=encrypt_secrets(a.participant.secrets),
-            location_id=a.location_id,
-            vendor=a.vendor,
-            iss=a.iss,
+            selection=selection_to_json(a.selection),
             scopes=a.scopes,
+            scopes_declined=a.scopes_declined,
             redirect_uri=a.redirect_uri,
             token_endpoint=a.token_endpoint,
             destination=a.destination,
@@ -75,10 +88,9 @@ class OrmAuthAttemptStore(AuthAttemptStore):
             state=r.state,
             code_verifier=decrypt_str(r.code_verifier_enc),
             participant=participant_from_json(r.participant, r.participant_secrets_enc),
-            location_id=r.location_id,
-            vendor=r.vendor,
-            iss=r.iss,
+            selection=selection_from_json(r.selection),
             scopes=list(r.scopes),
+            scopes_declined=list(r.scopes_declined or []),
             redirect_uri=r.redirect_uri,
             token_endpoint=r.token_endpoint,
             destination=r.destination,

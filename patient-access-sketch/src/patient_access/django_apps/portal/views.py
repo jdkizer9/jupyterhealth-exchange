@@ -67,10 +67,10 @@ def start(request: HttpRequest) -> HttpResponse:
     brand = participant.attrs.get("brand")
     if brand:
         try:
-            location = module.directory.location(brand)
+            selection = module.directory.selection(brand)
         except KeyError:
             return redirect("patient_access:pick")  # stale brand in the link: fall back to the picker
-        return render(request, "patient_access/confirm.html", {"location": location})
+        return render(request, "patient_access/confirm.html", {"selection": selection})
     return redirect("patient_access:pick")
 
 
@@ -94,7 +94,7 @@ def api_brands(request: HttpRequest) -> JsonResponse:
     results = get_module().directory.search(request.GET.get("q", ""), state=request.GET.get("state") or None)
     # No client ids or vendor config leave the server: the server launches.
     return JsonResponse(
-        {"results": [{"id": r.id, "name": r.name, "brand": r.brand_name, "address": r.address} for r in results]}
+        {"results": [{"id": r.id, "name": r.name, "brand": r.brand.name, "address": r.address} for r in results]}
     )
 
 
@@ -107,9 +107,8 @@ def launch(request: HttpRequest) -> HttpResponse:
     try:
         url = start_upstream_auth(
             participant=participant,
-            location_id=request.POST.get("location_id", ""),
+            selection_id=request.POST.get("selection_id", ""),
             directory=m.directory,
-            vendors=m.vendors,
             attempts=m.auth_attempts,
             redirect_uri=m.redirect_uri,
             destination=m.default_destination,
@@ -136,7 +135,6 @@ def callback(request: HttpRequest) -> HttpResponse:
                 error=request.GET.get("error"),
                 error_description=request.GET.get("error_description"),
                 directory=m.directory,
-                vendors=m.vendors,
                 attempts=m.auth_attempts,
                 identity=m.identity,
                 jobs=m.jobs,
@@ -173,7 +171,7 @@ def _job_json(job) -> dict:
         "id": job.id,
         "status": str(job.status),
         "terminal": job.status.terminal,
-        "source": {"brand": job.source.brand_name, "location": job.source.location_name},
+        "source": {"brand": job.source.brand_name, "facility": job.source.facility_name},
         "outcomes": [
             {
                 "label": o.label,

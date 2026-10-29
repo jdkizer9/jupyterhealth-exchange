@@ -4,9 +4,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from patient_access.core.models import Job, JobStatus, Participant, Receipt, Secrets, Source, TypeOutcome
+from patient_access.core.models import Job, JobStatus, Participant, Receipt, Secrets, TypeOutcome
 from patient_access.django_apps.jobs.models import JobRecord
 from patient_access.django_apps.jobs.stores import OrmJobClaimer, OrmJobStore
+from patient_access.testing.memory import source
 
 pytestmark = pytest.mark.django_db
 
@@ -15,7 +16,7 @@ def _job(**kw):
     return Job(
         id="",
         participant=Participant(ref="p1", provider="static", attrs={"arm": "a"}, secrets=Secrets({"jhe": "t0k"})),
-        source=Source("v", "https://ehr/fhir", "Brand", "1", "Clinic", ["s"], ["s"], "pat-1"),
+        source=source(scopes_requested=["s"], scopes_granted=["s"]),
         destination="local",
         **kw,
     )

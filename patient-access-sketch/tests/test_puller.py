@@ -5,11 +5,11 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from patient_access.core.models import Job, Participant, Secrets, Source
+from patient_access.core.models import Job, Participant, Secrets
 from patient_access.core.pipeline import EHR_TOKEN, FetchAborted
 from patient_access.core.puller import fetch
-from patient_access.core.vendors import QuerySpec, VendorConfig
-from patient_access.testing.memory import InMemorySpool
+from patient_access.core.source_settings import QuerySpec
+from patient_access.testing.memory import InMemorySpool, selection, settings, source
 
 BASE = "https://ehr.example/fhir"
 TABLE = (
@@ -18,7 +18,7 @@ TABLE = (
     QuerySpec("Vitals", "Observation", "Observation?category=vital-signs", "patient/Observation.read"),
     QuerySpec("Goals", "Goal", "Goal", "patient/Goal.read"),
 )
-VENDOR = VendorConfig("v", "c", "public", (), TABLE, page_cap=10, max_retries=0)
+VENDOR = settings("v", TABLE, page_cap=10, max_retries=0)
 
 
 class Resp:
@@ -66,7 +66,7 @@ def _job(expires=None):
     return Job(
         id="j",
         participant=Participant("p", "static"),
-        source=Source("v", BASE, "B", "1", "L", [], ["patient/*.read"], "pat-1"),
+        source=source(selection(iss=BASE), scopes_granted=["patient/*.read"]),
         destination="d",
         credentials=Secrets({EHR_TOKEN: "tok"}),
         token_expires_at=expires or datetime.now(UTC) + timedelta(hours=1),
