@@ -12,7 +12,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import OW_USER_ID_SYSTEM, EhrBrandLocation, EhrVendor, PatientIdentifier
+from core.models import OW_USER_ID_SYSTEM, DataSource, EhrBrandLocation, EhrVendor, Patient, PatientIdentifier
+from core.services.fhir_source import create_pull_fhir_source
 from core.views.patient_facing import patient_facing_config
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,25 @@ def ehr_patient_portal_callback(request):
                 http=m.http,
                 clock=m.clock,
             )
+            # Same transaction: the pull's own FhirSource, created now so its id is on the job
+            # before any sink runs (the S3 key is {patient_id}/{fhir_source_id}).
+            job = m.jobs.get(job_id)
+            patient = Patient.objects.get(id=int(job.participant.ref))
+            location = (
+                EhrBrandLocation.objects.filter(id=int(job.source.facility_id)).first()
+                if job.source.facility_id
+                else None
+            )
+            fhir_source = create_pull_fhir_source(
+                patient,
+                DataSource.objects.get(id=job.participant.attrs["data_source_id"]),
+                ehr_brand_location=location,
+                base_url=job.source.iss,
+                when=job.created_at,
+            )
+            job.participant.attrs["patient_id"] = patient.id
+            job.participant.attrs["fhir_source_id"] = fhir_source.id
+            m.jobs.save(job)
     except FlowError as e:
         query = urlencode(
             {"route": "error", "title": "We couldn't connect to your healthcare organization", "message": str(e)}

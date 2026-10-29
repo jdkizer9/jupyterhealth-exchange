@@ -35,7 +35,7 @@
         "class": "patient_access.destinations.s3.S3Sink",
         "options": {
           "bucket": "patient-access",
-          "layout": "pulls/{participant.ref}/{job.id}",
+          "layout": "{attrs[patient_id]}/{attrs[fhir_source_id]}",
           "endpoint_url": "http://silo:9000",
           "access_key": "patient-access-dev",
           "secret_key": "patient-access-dev-secret",
