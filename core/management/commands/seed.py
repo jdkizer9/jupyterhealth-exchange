@@ -352,6 +352,9 @@ class Command(BaseCommand):
             # any OMH measure: the pull spans every mapped resource type and lands in the
             # auxiliary FHIR store, not the OMH Observation model.
             ("EHR Patient Portal", "patient_app", ["*"]),
+            # USCDI Patient Access (sketch): the server-side counterpart of the EHR Patient
+            # Portal, same wildcard scope, delivered by the Patient Access Module.
+            ("USCDI Patient Access", "patient_app", ["*"]),
         ]
         for name, type, scope_codes in data_sources:
             # `type` is a default, not a lookup: matching on (name, type) would make a retype
@@ -415,6 +418,14 @@ class Command(BaseCommand):
                 # No iss here: the hospital the patient picks supplies it, from
                 # EhrBrand.fhir_base_url. client_id/scopes come from that brand's EhrVendor
                 # (see seed_example_institute's EhrVendor seeding, below).
+            },
+            {
+                # USCDI Patient Access (sketch): same shape as the EHR Patient Portal, served
+                # at /clients/uscdi-patient-access/; the Epic callback for it is
+                # /clients/uscdi-patient-access/callback, registered on the Epic app separately.
+                "name": "USCDI Patient Access",
+                "invitation_url": "http://localhost:8000/clients/uscdi-patient-access/?code=CODE",
+                "data_sources": ["USCDI Patient Access"],
             },
         ]
 
@@ -547,6 +558,12 @@ class Command(BaseCommand):
         ehr_patient_portal_ds = DataSource.objects.get(name="EHR Patient Portal")
         StudyDataSource.objects.create(study=lifespan_study_bp_hr, data_source=ehr_patient_portal_ds)
         StudyScopeRequest.objects.create(study=lifespan_study_bp_hr, scope_code=code_fhir_star)
+
+        # USCDI Patient Access (sketch): invitable for the same study, same records request.
+        uscdi_client = get_application_model().objects.get(name="USCDI Patient Access")
+        StudyClient.objects.create(study=lifespan_study_bp_hr, client=uscdi_client)
+        uscdi_ds = DataSource.objects.get(name="USCDI Patient Access")
+        StudyDataSource.objects.create(study=lifespan_study_bp_hr, data_source=uscdi_ds)
 
         # Seed EHR hospital brands so the EHR Patient Portal hospital picker (#489) has data to
         # search out of the box. Uses the curated sample bundle; production imports the

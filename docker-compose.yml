@@ -48,6 +48,28 @@ services:
       retries: 30
     restart: unless-stopped
 
+  silo:
+    # Dev S3 for the Patient Access Module's bucket destination (sketch). PGSTY Silo, the
+    # maintained MinIO fork. Console: http://localhost:9101 (patient-access-dev / ...-secret).
+    # Named `silo`, not `s3`: the sketch's own stack can join this network and has an `s3`.
+    image: docker.io/pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: patient-access-dev
+      MINIO_ROOT_PASSWORD: patient-access-dev-secret
+    volumes:
+      - ./local/silo:/data
+    ports:
+      # 9100/9101 on the host: the sketch's own Silo takes 9000/9001 when both stacks run.
+      - "127.0.0.1:${JHE_S3_PORT:-9100}:9000"
+      - "127.0.0.1:${JHE_S3_CONSOLE_PORT:-9101}:9001"
+    healthcheck:
+      test: ["CMD", "silo", "healthcheck", "ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   jhe:
     build: .
     image: jhe-dev:local

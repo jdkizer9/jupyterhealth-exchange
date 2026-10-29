@@ -1,0 +1,142 @@
+# Patient Access Module sketch: throwaway, local development only.
+#
+#   docker compose up --build
+#   open http://localhost:8080/health
+#
+# Every value below is a public, local-only development value, committed on purpose so
+# `docker compose up` works with no setup. None of them unlock anything outside this
+# machine, and none of them are fallbacks in server/settings.py (which requires them).
+#
+# The EHR is the hosted SMART Health IT sandbox (https://launch.smarthealthit.org), reached
+# over the internet by both the browser and the containers, so issuer URLs match.
+#
+# Scenario B (deliver into a running JHE) adds docker-compose.jhe.yml, which joins the JHE
+# dev stack's network; scenario A needs nothing else.
+#
+# Data (Postgres, the spool, LocalDirectorySink output) lives in ./local/, gitignored.
+
+name: patient-access
+
+x-pa-environment: &pa-environment
+  DJANGO_SETTINGS_MODULE: server.settings
+  PA_DEBUG: "1"
+  PA_SECRET_KEY: dev-only-patient-access-sketch-django-secret-key-not-for-real-use
+  # Fernet keys (comma-separated, first encrypts) for EHR tokens, PKCE verifiers, participant
+  # secrets and per-job spool keys at rest.
+  PA_ENCRYPTION_KEYS: 2cw8G2XTqJThyRDiiKGLg7kt_vSCKqOcEXxFCQtcAy4=
+  # Aliases, not service names: scenario B joins JHE's network, where `db` is JHE's Postgres.
+  PA_DB_HOST: pa-db
+  PA_DB_PORT: "5432"
+  PA_DB_NAME: patient_access
+  PA_DB_USER: patient_access
+  PA_DB_PASSWORD: patient_access
+  PA_SITE_URL: http://localhost:${PA_PORT:-8080}
+  PA_ALLOWED_HOSTS: localhost,127.0.0.1,web
+  # Which PATIENT_ACCESS dict server/patient_access_config.py builds: default, s3spool, thread, dramatiq, jhe.
+  PA_VARIANT: ${PA_VARIANT:-default}
+  PA_SPOOL_DIR: /code/local/spool
+  PA_OUT_DIR: /code/local/out
+  # The sandbox accepts whatever secret the launch options carry; this one is baked into the
+  # "confidential symmetric" sandbox brand's iss by seed_directory.
+  PA_SMART_SANDBOX_CLIENT_SECRET: dev-only-sandbox-client-secret
+  # Which configured destination new jobs deliver to: "s3" (Silo) or "local" (./local/out).
+  PA_DESTINATION: ${PA_DESTINATION:-s3}
+  PA_S3_ENDPOINT: http://pa-s3:9000
+  PA_S3_ACCESS_KEY: patient-access-dev
+  PA_S3_SECRET_KEY: patient-access-dev-secret
+
+services:
+  db:
+    image: postgres:16
+    networks:
+      default:
+        aliases: [pa-db]
+    environment:
+      POSTGRES_DB: patient_access
+      POSTGRES_USER: patient_access
+      POSTGRES_PASSWORD: patient_access
+    volumes:
+      - ./local/db:/var/lib/postgresql/data
+    ports:
+      # A random loopback port unless you pick one: PA_DB_PORT=5440 docker compose up
+      - "127.0.0.1:${PA_DB_PORT:-0}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U patient_access -d patient_access"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  s3:
+    # PGSTY Silo, the maintained MinIO fork (MinIO CE is archived). Same protocol, env vars,
+    # console and lifecycle engine. Console: http://localhost:9001 (patient-access-dev / ...-secret).
+    image: docker.io/pgsty/silo:RELEASE.2026-10-18T00-00-00Z
+    networks:
+      default:
+        aliases: [pa-s3]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: patient-access-dev
+      MINIO_ROOT_PASSWORD: patient-access-dev-secret
+    volumes:
+      - ./local/s3:/data
+    ports:
+      - "127.0.0.1:${PA_S3_PORT:-9000}:9000"
+      - "127.0.0.1:${PA_S3_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "silo", "healthcheck", "ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    build: .
+    image: patient-access-sketch:local
+    pull_policy: never
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py seed_directory && exec python manage.py runserver 0.0.0.0:8080"]
+    environment:
+      <<: *pa-environment
+    ports:
+      - "127.0.0.1:${PA_PORT:-8080}:8080"
+    volumes:
+      - .:/code
+      - uv-cache:/root/.cache/uv # keeps scripts/check.sh's ruff download between runs
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
+    restart: unless-stopped
+
+  worker:
+    image: patient-access-sketch:local
+    pull_policy: never
+    # The DbPollingDispatcher's worker side: poll, claim, run_job, sweep.
+    command: ["python", "manage.py", "run_jobs", "--heartbeat-file", "/tmp/pa-worker-heartbeat"]
+    environment:
+      <<: *pa-environment
+    volumes:
+      - .:/code
+    depends_on:
+      web:
+        condition: service_healthy # web runs the migrations
+      s3:
+        condition: service_healthy
+    healthcheck:
+      # The poll loop touches the file on every healthy iteration; a dead or stuck loop shows as
+      # unhealthy even though the process (or the dev reloader around it) is still running.
+      test: ["CMD-SHELL", "test -n \"$(find /tmp/pa-worker-heartbeat -mmin -1 2>/dev/null)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  uv-cache:

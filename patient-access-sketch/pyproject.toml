@@ -1,0 +1,133 @@
+# Throwaway sketch of the Patient Access Module. See README.md.
+[project]
+name = "patient-access"
+version = "0.0.0"
+description = "Server-side SMART on FHIR patient access: identity, upstream OAuth, fetch, format, sink."
+requires-python = ">=3.12"
+dependencies = [
+    # core: SMART client and puller
+    "requests>=2.32",
+    # core: private_key_jwt assertions; identity: deep-link verification
+    "pyjwt[crypto]>=2.9",
+    # spool: per-job encryption (already pulled in by pyjwt[crypto]; named because spool uses it directly)
+    "cryptography>=43",
+]
+
+[project.optional-dependencies]
+django = ["django==5.2.17", "psycopg[binary]>=3.2"]
+s3 = ["boto3>=1.35"]
+dramatiq = ["dramatiq[redis]==2.2.1"]
+dev = [
+    "pytest>=8",
+    "pytest-django>=4.9",
+    "import-linter>=2.1",
+    "mypy>=1.18",
+    "django-stubs>=5.2",
+    "boto3-stubs[s3]>=1.35",
+    "types-requests>=2.32",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/patient_access"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+DJANGO_SETTINGS_MODULE = "server.settings"
+# Core tests must not need a database; Django tests opt in with the `django_db` mark.
+addopts = "-q"
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+mypy_path = "src"
+packages = ["patient_access", "server"]
+ignore_missing_imports = true # dramatiq ships no stubs
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[tool.django-stubs]
+django_settings_module = "server.settings"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["src/patient_access/django_apps/*/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+# Keep core honest: it knows kinds of things, never where they are (design §9).
+[tool.importlinter]
+root_package = "patient_access"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "core imports no framework, cloud SDK or outer layer"
+type = "forbidden"
+source_modules = ["patient_access.core"]
+forbidden_modules = [
+    "django",
+    "boto3",
+    "botocore",
+    "patient_access.django_apps",
+    "patient_access.destinations",
+    "patient_access.formatters",
+    "patient_access.identity",
+    "patient_access.spool",
+    "patient_access.dispatch",
+    "patient_access.credentials",
+    "patient_access.testing",
+]
+
+[[tool.importlinter.contracts]]
+name = "plugs import no Django"
+type = "forbidden"
+source_modules = [
+    "patient_access.destinations",
+    "patient_access.formatters",
+    "patient_access.identity",
+    "patient_access.spool",
+    "patient_access.dispatch",
+    "patient_access.credentials",
+]
+forbidden_modules = ["django", "patient_access.django_apps"]
+
+# A host installs only the apps it uses (django_apps/__init__.py): the required app must not
+# drag in an optional one, and the optional ones stand alone.
+[[tool.importlinter.contracts]]
+name = "the jobs app imports no optional app"
+type = "forbidden"
+source_modules = ["patient_access.django_apps.jobs"]
+forbidden_modules = [
+    "patient_access.django_apps.directory",
+    "patient_access.django_apps.deeplink",
+    "patient_access.django_apps.portal",
+]
+
+[[tool.importlinter.contracts]]
+name = "optional apps are independent of each other"
+type = "independence"
+modules = [
+    "patient_access.django_apps.directory",
+    "patient_access.django_apps.deeplink",
+    "patient_access.django_apps.portal",
+]
+
+[[tool.importlinter.contracts]]
+name = "boto3 only in the S3 modules"
+type = "forbidden"
+source_modules = [
+    "patient_access.core",
+    "patient_access.formatters",
+    "patient_access.identity",
+    "patient_access.dispatch",
+    "patient_access.spool.local_disk",
+    "patient_access.destinations.local_dir",
+    "patient_access.destinations.layout",
+    "patient_access.destinations.jhe",
+    # add each non-S3 destination module as it lands
+]
+forbidden_modules = ["boto3", "botocore"]

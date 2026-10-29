@@ -6,7 +6,7 @@ from rest_framework.routers import DefaultRouter
 from core.fhir.config import FHIR_VERSION
 
 from . import views
-from .views import common, ehr_patient_portal, ow
+from .views import common, ehr_patient_portal, ow, patient_access
 from .views.fhir import FHIRResourceView, capability_statement, smart_configuration
 from .views.fhir_import import FHIRImportView
 
@@ -63,6 +63,8 @@ urlpatterns = [
         name="apple-app-site-association",
     ),
     path(".well-known/assetlinks.json", common.assetlinks, name="assetlinks"),
+    # Patient Access Module client keys (sketch): the JWK Set URL registered with EHR vendors.
+    path(".well-known/jwks.json", patient_access.jwks, name="uscdi-patient-access-jwks"),
     # Home
     path("", common.home, name="home"),
     # Django auth and accounts
@@ -113,6 +115,12 @@ urlpatterns = [
         name="ehr-patient-portal-callback",
     ),
     path("api/v1/ehr-patient-portal/brands", ehr_patient_portal.brands_search, name="ehr-patient-portal-brands"),
+    # USCDI Patient Access (sketch): a second client beside the EHR Patient Portal, server-side
+    # pull via the Patient Access Module. Its callback path is registered with Epic separately.
+    path("clients/uscdi-patient-access/", patient_access.connect, name="uscdi-patient-access-connect"),
+    path("clients/uscdi-patient-access/callback", patient_access.callback, name="uscdi-patient-access-callback"),
+    path("api/v1/uscdi-patient-access/launch", patient_access.launch, name="uscdi-patient-access-launch"),
+    path("api/v1/uscdi-patient-access/jobs/<str:job_id>", patient_access.job_status, name="uscdi-patient-access-job"),
     path(
         "api/v1/ehr-patient-portal/identifier",
         ehr_patient_portal.save_patient_identifier,

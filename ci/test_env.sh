@@ -6,6 +6,8 @@ export DB_PASSWORD="postgres"
 export DB_HOST="localhost"
 export DB_PORT="5432"
 export SECRET_KEY="super-secret-key"
+# Patient Access Module (sketch): a test-only Fernet key; the rest of PATIENT_ACCESS is in jhe/settings.py.
+export PATIENT_ACCESS_ENCRYPTION_KEYS="7PPeQ9QMC6e3BILGOrLymnkqi3_i00plJ-PYHOL7iK4="
 export OIDC_RSA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
 MIIJQQIBADANBgkqhkiG9w0BAQEFAASCCSswggknAgEAAoICAQC4FaxiLBy7ttiN
 yjgQRNGtLP9uvqcco0ieUNM+X+x5trTX90FldupRTX47s7QIKLpLPyQE5KBAx4Qz

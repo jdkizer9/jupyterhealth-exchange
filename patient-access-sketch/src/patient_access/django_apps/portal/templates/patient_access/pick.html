@@ -1,0 +1,24 @@
+{% extends "patient_access/base.html" %}
+{% block content %}
+<h1>Where do you get care?</h1>
+<p class="muted">Search for your hospital or health system. You'll sign in to its patient portal next.</p>
+<form method="get" action="{% url 'patient_access:pick' %}">
+  <input type="text" name="q" value="{{ q }}" placeholder="Hospital, health system or city" autofocus aria-label="Search">
+  <input type="text" name="state" value="{{ state }}" placeholder="State" size="4" aria-label="State">
+  <input type="submit" value="Search">
+</form>
+{% if q or state %}
+  {% for sel in results %}
+  <div class="card">
+    <strong>{{ sel.name }}</strong>{% if sel.name != sel.brand.name %} <span class="muted">· {{ sel.brand.name }}</span>{% endif %}<br>
+    <span class="muted">{{ sel.address }}</span>
+    <form method="post" action="{% url 'patient_access:launch' %}" class="inline">
+      {% csrf_token %}<input type="hidden" name="selection_id" value="{{ sel.id }}">
+      <button type="submit" data-location="{{ sel.id }}">Connect</button>
+    </form>
+  </div>
+  {% empty %}
+  <p class="muted">No matches.</p>
+  {% endfor %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "patient_access/base.html" %}
+{% block title %}Sharing your records{% endblock %}
+{% block content %}
+<h1>Sharing your records from {{ job.source.brand }}</h1>
+<p>Status: <strong id="status">{{ job.status }}</strong> <span class="muted" id="phase-note"></span></p>
+<p class="bad" id="failure">{{ job.failure|default_if_none:"" }}</p>
+<table id="outcomes">
+  <thead><tr><th>What</th><th>Status</th><th>Records</th></tr></thead>
+  <tbody>{% for o in job.outcomes %}<tr><td>{{ o.label }}</td><td>{{ o.status }}</td><td>{{ o.count }}</td></tr>{% endfor %}</tbody>
+</table>
+<div id="receipt"></div>
+{{ job|json_script:"job-data" }}
+<script>
+  const NOTES = {queued: "waiting for a worker", fetching: "downloading from your health system",
+    fetched: "downloaded, preparing delivery", delivering: "delivering", done: "finished",
+    failed: "delivery failed, retrying", failed_terminal: "stopped"};
+  function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+  function render(job) {
+    document.getElementById("status").textContent = job.status;
+    document.getElementById("phase-note").textContent = NOTES[job.status] || "";
+    document.getElementById("failure").textContent = job.failure || "";
+    document.querySelector("#outcomes tbody").innerHTML = job.outcomes.map(o =>
+      `<tr><td>${esc(o.label)}</td><td class="${o.status === "error" ? "bad" : o.status === "ok" ? "ok" : ""}">${esc(o.status)}${o.capped ? " (capped)" : ""}${o.error ? " · " + esc(o.error) : ""}</td><td>${esc(o.count)}</td></tr>`).join("");
+    const deliveries = Object.entries(job.deliveries || {});
+    if (deliveries.length) {
+      document.getElementById("receipt").innerHTML = deliveries.map(([name, d]) => {
+        const r = d.receipt;
+        if (!r) return `<h2>Delivery: ${esc(name)}</h2><p class="${d.status === "failed_terminal" ? "bad" : ""}">${esc(d.status)}${d.failure ? " · " + esc(d.failure) : ""}</p>`;
+        return `<h2>Receipt: ${esc(name)}</h2><table>
+        <tr><th>Delivered to</th><td class="receipt-location">${esc(r.destination)}: ${esc(r.location)}</td></tr>
+        <tr><th>Records</th><td class="receipt-resources">${esc(r.resources)}</td></tr>
+        <tr><th>Documents</th><td>${esc(r.blobs)}</td></tr>
+        <tr><th>Size</th><td>${esc(r.bytes)} bytes</td></tr>
+        ${Object.keys(r.failures || {}).length ? `<tr><th>Not accepted</th><td>${Object.entries(r.failures).map(([k, v]) => esc(v) + " × " + esc(k)).join("<br>")}</td></tr>` : ""}
+      </table>`;
+      }).join("");
+    }
+  }
+  const initial = JSON.parse(document.getElementById("job-data").textContent);
+  render(initial);
+  async function poll() {
+    const r = await fetch("{% url 'patient_access:api_job' job_id=job.id %}", {credentials: "same-origin"});
+    if (!r.ok) return;
+    const job = await r.json();
+    render(job);
+    if (!job.terminal) setTimeout(poll, 2000);
+  }
+  if (!initial.terminal) setTimeout(poll, 2000);
+</script>
+{% endblock %}

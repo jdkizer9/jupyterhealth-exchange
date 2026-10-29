@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Share your health records{% endblock %}</title>
+  <style>
+    :root { --fg: #1b1f24; --muted: #5b6472; --bg: #ffffff; --line: #d8dde6; --accent: #2457c5; --ok: #1d7a45; --bad: #b42318; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6e9ef; --muted: #9aa3b2; --bg: #14171c; --line: #2c323c; --accent: #7aa2ff; --ok: #5cc98a; --bad: #ff8a80; }
+    }
+    body { font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); margin: 0; }
+    main { max-width: 44rem; margin: 2rem auto; padding: 0 16px; }
+    h1 { font-size: 1.4rem; }
+    .muted { color: var(--muted); }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 8px 0; }
+    button, input[type=submit] { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+    input[type=text], select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    form.inline { display: inline; }
+  </style>
+</head>
+<body><main>{% block content %}{% endblock %}</main></body>
+</html>
