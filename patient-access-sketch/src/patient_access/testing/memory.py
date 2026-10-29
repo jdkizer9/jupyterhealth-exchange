@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from patient_access.core.credentials import CredentialError, SecretStore
 from patient_access.core.interfaces import (
     AuthAttemptStore,
     Directory,
@@ -132,22 +133,27 @@ def selection(
 
 def settings(vendor: str = "v", queries: tuple[QuerySpec, ...] = (), **kw) -> SourceSettings:
     """Test SourceSettings: a public registration and a profile of `queries`; `kw` go to FetchProfile
-    (page_cap, documents, ...) or, for auth_method / client_id / scope_version / base_scopes, to the registration."""
-    reg_keys = {
-        "client_id",
-        "auth_method",
-        "scope_version",
-        "base_scopes",
-        "client_secret",
-        "private_key_pem",
-        "key_id",
-        "jwt_alg",
-    }
+    (page_cap, documents, ...) or, for client_id / methods / scope_version / base_scopes, to the registration."""
+    reg_keys = {"client_id", "methods", "scope_version", "base_scopes"}
     reg = {k: kw.pop(k) for k in list(kw) if k in reg_keys}
     return SourceSettings(
         registration=ClientRegistration(vendor=vendor, client_id=reg.pop("client_id", "c"), **reg),
         fetch=FetchProfile(name="test", queries=queries, **kw),
     )
+
+
+class DictSecretStore(SecretStore):
+    def __init__(self, values: dict[str, str] | None = None):
+        self.values = dict(values or {})
+
+    def has(self, name: str) -> bool:
+        return name in self.values
+
+    def get(self, name: str) -> str:
+        try:
+            return self.values[name]
+        except KeyError:
+            raise CredentialError(f"no secret {name!r}") from None
 
 
 def source(sel: Selection | None = None, **kw) -> Source:

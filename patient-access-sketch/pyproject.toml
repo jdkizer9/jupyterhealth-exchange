@@ -78,6 +78,7 @@ forbidden_modules = [
     "patient_access.identity",
     "patient_access.spool",
     "patient_access.dispatch",
+    "patient_access.credentials",
     "patient_access.testing",
 ]
 
@@ -90,6 +91,7 @@ source_modules = [
     "patient_access.identity",
     "patient_access.spool",
     "patient_access.dispatch",
+    "patient_access.credentials",
 ]
 forbidden_modules = ["django", "patient_access.django_apps"]
 

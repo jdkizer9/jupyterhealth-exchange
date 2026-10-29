@@ -161,6 +161,12 @@ class AuthAttempt:
     used_at: datetime | None = None
     # Offered at the checklist and left unchecked, so the receipt can say what the patient declined.
     scopes_declined: list[str] = field(default_factory=list)
+    # How the launch went, recorded so the callback authenticates the same way and the receipt can
+    # explain a failure at a site. Never the credential itself.
+    auth_method: str = "public"
+    key_id: str | None = None
+    scope_version: str = "v1"
+    pkce_advertised: bool = True
 
     @property
     def vendor(self) -> str:
@@ -179,6 +185,8 @@ class TokenResponse:
     patient: str
     token_type: str = "Bearer"
     raw: dict[str, Any] = field(default_factory=dict)  # minus the tokens
+    # Whether the server sent a refresh token (we do not ask for one yet, and never keep it).
+    refresh_token_issued: bool = False
 
 
 # --- the job ----------------------------------------------------------------------------------
@@ -218,6 +226,8 @@ class Source:
     customer_id: str | None = None
     customer_name: str | None = None
     scopes_declined: list[str] = field(default_factory=list)
+    auth_method: str = "public"  # how the token was obtained; never the credential
+    key_id: str | None = None
 
     @classmethod
     def from_selection(
@@ -228,6 +238,8 @@ class Source:
         scopes_granted: list[str],
         ehr_patient_id: str,
         scopes_declined: list[str] | None = None,
+        auth_method: str = "public",
+        key_id: str | None = None,
     ) -> Source:
         ep = sel.endpoint
         return cls(
@@ -246,6 +258,8 @@ class Source:
             customer_id=ep.customer_id,
             customer_name=ep.customer_name,
             scopes_declined=list(scopes_declined or []),
+            auth_method=auth_method,
+            key_id=key_id,
         )
 
     @property

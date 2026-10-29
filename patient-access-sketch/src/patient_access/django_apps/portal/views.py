@@ -24,6 +24,14 @@ def health(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"ok": True})
 
 
+@require_GET
+def jwks(request: HttpRequest) -> JsonResponse:
+    """The public halves of our signing keys, for EHRs that verify private_key_jwt assertions."""
+    response = JsonResponse(get_module().keyring.keys.public_jwks())
+    response["Cache-Control"] = "public, max-age=300"  # EHRs refetch; rotation shows within minutes
+    return response
+
+
 # --- session binding --------------------------------------------------------------------------
 
 
@@ -109,6 +117,7 @@ def launch(request: HttpRequest) -> HttpResponse:
             participant=participant,
             selection_id=request.POST.get("selection_id", ""),
             directory=m.directory,
+            keyring=m.keyring,
             attempts=m.auth_attempts,
             redirect_uri=m.redirect_uri,
             destination=m.default_destination,
@@ -135,6 +144,7 @@ def callback(request: HttpRequest) -> HttpResponse:
                 error=request.GET.get("error"),
                 error_description=request.GET.get("error_description"),
                 directory=m.directory,
+                keyring=m.keyring,
                 attempts=m.auth_attempts,
                 identity=m.identity,
                 jobs=m.jobs,

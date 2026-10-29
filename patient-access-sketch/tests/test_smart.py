@@ -6,33 +6,18 @@ import jwt
 import pytest
 
 from patient_access.core.profiles import PROFILES, USCDI
-from patient_access.core.smart import ASSERTION_TTL_SECONDS, client_assertion
-from patient_access.core.source_settings import (
-    ClientRegistration,
-    ConfigError,
-    QuerySpec,
-    apply_overrides,
-    load_vendors,
-)
+from patient_access.core.smart import ASSERTION_TTL_SECONDS, assertion_claims
+from patient_access.core.source_settings import ConfigError, QuerySpec, apply_overrides, load_vendors
+from patient_access.credentials.env import EnvSigningKeys
 from patient_access.testing.memory import InMemoryDirectory, selection, settings
 
 KEYS = Path(__file__).resolve().parent.parent / "compose" / "dev-keys"
 
 
-def _registration():
-    return ClientRegistration(
-        vendor="v",
-        client_id="cid",
-        auth_method="private_key_jwt",
-        private_key_pem=(KEYS / "smart-client-dev.pem").read_text(),
-        key_id="sketch-1",
-        jwt_alg="RS384",
-    )
-
-
-def test_client_assertion_has_unique_jti_short_exp_and_registration_alg():
-    v = _registration()
-    a, b = client_assertion(v, "https://ehr/token", now=1000), client_assertion(v, "https://ehr/token", now=1000)
+def test_client_assertion_has_unique_jti_short_exp_and_kid():
+    keys = EnvSigningKeys([{"kid": "sketch-1", "alg": "RS384", "path": str(KEYS / "smart-client-dev.pem")}])
+    a = keys.sign("sketch-1", assertion_claims("cid", "https://ehr/token", now=1000), "RS384")
+    b = keys.sign("sketch-1", assertion_claims("cid", "https://ehr/token", now=1000), "RS384")
     pub = (KEYS / "smart-client-dev.pub.pem").read_text()
     ca = jwt.decode(a, pub, algorithms=["RS384"], audience="https://ehr/token", options={"verify_exp": False})
     cb = jwt.decode(b, pub, algorithms=["RS384"], audience="https://ehr/token", options={"verify_exp": False})

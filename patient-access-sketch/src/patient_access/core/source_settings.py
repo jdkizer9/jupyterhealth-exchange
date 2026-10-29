@@ -10,18 +10,18 @@ fetch profile starts from a named profile in code (`profiles.py`) and may be ove
 vendor, per customer and per endpoint by the directory implementation, which is the only place
 the layering is visible.
 
-`load_vendors` reads the `vendors` section of a deployment config (the standalone host);
-secrets are referenced by env var name, never inlined.
+`load_vendors` reads the `vendors` section of a deployment config (the standalone host). A
+registration names its credentials (a signing key id, a secret name); the material lives in the
+deployment's SigningKeys and SecretStore (`credentials.py`), never in settings.
 """
 
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-AUTH_METHODS = ("public", "client_secret_basic", "client_secret_post", "private_key_jwt")
+from .credentials import PUBLIC, AuthMethod
 
 
 class ConfigError(Exception):
@@ -59,13 +59,10 @@ class ClientRegistration:
 
     vendor: str
     client_id: str
-    auth_method: str = "public"
+    # Preference order; the launch uses the first the deployment can satisfy (Keyring.choose).
+    methods: tuple[AuthMethod, ...] = (AuthMethod(PUBLIC),)
     base_scopes: tuple[str, ...] = ("launch/patient", "openid", "fhirUser")
     scope_version: str = "v1"  # "v2" turns patient/X.read into patient/X.rs
-    client_secret: str | None = None
-    private_key_pem: str | None = None
-    key_id: str | None = None
-    jwt_alg: str = "RS384"
 
     def scopes(self, resource_scopes: list[str]) -> list[str]:
         """Base scopes plus the given resource scopes, in this registration's scope form."""
@@ -151,55 +148,35 @@ def apply_overrides(profile: FetchProfile, overrides: Mapping[str, Any] | None) 
 
 def load_vendors(
     config: Mapping[str, Any],
-    environ: Mapping[str, str] | None = None,
     profiles: Mapping[str, FetchProfile] | None = None,
 ) -> dict[str, SourceSettings]:
     """Build SourceSettings from the `vendors` section of a deployment config.
 
-    Each entry: client_id, auth_method, base_scopes, scope_version, credential references
-    (client_secret_env, private_key_env | private_key_path, key_id, jwt_alg), `profile` (a name in
-    `profiles`, default "uscdi") and `overrides` (apply_overrides format).
+    Each entry: client_id, `auth_methods` (preference order, each {"method", "kid"?, "alg"?,
+    "secret"?}; default public), base_scopes, scope_version, `profile` (a name in `profiles`,
+    default "uscdi") and `overrides` (apply_overrides format). Credentials are named, not given.
     """
     from .profiles import PROFILES  # local import: profiles is data, settings is the vocabulary
 
-    environ = os.environ if environ is None else environ
     profiles = PROFILES if profiles is None else profiles
     out: dict[str, SourceSettings] = {}
     for name, raw in (config.get("vendors") or {}).items():
         raw = dict(raw)
-        method = raw.pop("auth_method", "public")
-        if method not in AUTH_METHODS:
-            raise ConfigError(f"vendor {name}: auth_method {method!r} not one of {AUTH_METHODS}")
         profile_name = raw.pop("profile", "uscdi")
         if profile_name not in profiles:
             raise ConfigError(f"vendor {name}: unknown profile {profile_name!r} (have {sorted(profiles)})")
-        secret = None
-        if env := raw.pop("client_secret_env", None):
-            secret = environ.get(env)
-            if not secret:
-                raise ConfigError(f"vendor {name}: env var {env} is not set")
-        pem = None
-        if env := raw.pop("private_key_env", None):
-            pem = environ.get(env)
-            if not pem:
-                raise ConfigError(f"vendor {name}: env var {env} is not set")
-        if path := raw.pop("private_key_path", None):
-            with open(path, encoding="utf-8") as f:
-                pem = f.read()
-        if method.startswith("client_secret") and not secret:
-            raise ConfigError(f"vendor {name}: {method} needs client_secret_env")
-        if method == "private_key_jwt" and not pem:
-            raise ConfigError(f"vendor {name}: private_key_jwt needs private_key_env or private_key_path")
+        try:
+            methods = tuple(AuthMethod(**m) for m in raw.pop("auth_methods", [{"method": PUBLIC}]))
+        except (TypeError, ValueError) as e:
+            raise ConfigError(f"vendor {name}: {e}") from e
+        if not methods:
+            raise ConfigError(f"vendor {name}: auth_methods is empty")
         registration = ClientRegistration(
             vendor=name,
             client_id=raw.pop("client_id"),
-            auth_method=method,
+            methods=methods,
             base_scopes=tuple(raw.pop("base_scopes", ClientRegistration.base_scopes)),
             scope_version=raw.pop("scope_version", "v1"),
-            client_secret=secret,
-            private_key_pem=pem,
-            key_id=raw.pop("key_id", None),
-            jwt_alg=raw.pop("jwt_alg", "RS384"),
         )
         overrides = dict(raw.pop("overrides", None) or {})
         # Limits and documents given at the top level of the entry are overrides too.

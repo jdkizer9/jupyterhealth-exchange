@@ -7,6 +7,7 @@ from datetime import datetime
 
 import requests
 
+from .credentials import Keyring
 from .interfaces import AuthAttemptStore, Directory, IdentityError, IdentityProvider, JobDispatcher, JobStore
 from .models import Job, JobId, Participant, Secrets, Source, TypeOutcome
 from .pipeline import EHR_TOKEN
@@ -22,6 +23,7 @@ def start_upstream_auth(
     participant: Participant,
     selection_id: str,
     directory: Directory,
+    keyring: Keyring,
     attempts: AuthAttemptStore,
     redirect_uri: str,
     destination: str,
@@ -43,6 +45,7 @@ def start_upstream_auth(
             participant=participant,
             selection=selection,
             settings=settings,
+            keyring=keyring,
             redirect_uri=redirect_uri,
             destination=destination,
             attempts=attempts,
@@ -62,6 +65,7 @@ def finish_upstream_auth(
     error: str | None,
     error_description: str | None,
     directory: Directory,
+    keyring: Keyring,
     attempts: AuthAttemptStore,
     identity: IdentityProvider,
     jobs: JobStore,
@@ -84,7 +88,7 @@ def finish_upstream_auth(
     except KeyError:
         raise FlowError(f"{attempt.selection.brand.name} is not available for connection yet.") from None
     try:
-        token = exchange_code(attempt, code, settings, http, clock)
+        token = exchange_code(attempt, code, settings, keyring, http, clock)
     except SmartError as e:
         raise FlowError(str(e)) from e
     try:
@@ -100,6 +104,8 @@ def finish_upstream_auth(
             scopes_granted=token.scopes_granted,
             ehr_patient_id=token.patient,
             scopes_declined=attempt.scopes_declined,
+            auth_method=attempt.auth_method,
+            key_id=attempt.key_id,
         ),
         destination=attempt.destination,
         credentials=Secrets({EHR_TOKEN: token.access_token}),

@@ -20,6 +20,7 @@ class AuthAttemptRecord(models.Model):
     selection = models.JSONField()  # Selection as a value: brand, endpoint, facility
     scopes = models.JSONField()
     scopes_declined = models.JSONField(default=list)
+    auth = models.JSONField(default=dict)  # method, kid, scope_version, pkce_advertised: never a credential
     redirect_uri = models.TextField()
     token_endpoint = models.TextField()
     destination = models.CharField()

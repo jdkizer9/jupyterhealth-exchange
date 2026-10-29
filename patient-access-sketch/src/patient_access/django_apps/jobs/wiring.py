@@ -26,6 +26,7 @@ import requests
 from django.conf import settings
 from django.utils.module_loading import import_string
 
+from patient_access.core.credentials import Keyring, NoSecrets, NoSigningKeys
 from patient_access.core.http import session as http_session
 from patient_access.core.interfaces import (
     AuthAttemptStore,
@@ -92,6 +93,7 @@ class Module:
     default_destination: str
     dispatcher: JobDispatcher
     vendors: dict[str, SourceSettings]
+    keyring: Keyring  # signing keys and secrets; the host serves keyring.keys.public_jwks()
     deps: Deps
     claimer: OrmJobClaimer
     site_url: str
@@ -118,6 +120,11 @@ def get_module() -> Module:
     services: dict[str, Any] = {"site_url": settings.SITE_URL}
     vendors = load_vendors(_subst({"vendors": config.get("vendors")}))
     services["vendors"] = vendors
+    # Optional plugs: a public-client-only deployment names neither.
+    keyring = Keyring(
+        keys=build(config["signing_keys"], services) if "signing_keys" in config else NoSigningKeys(),
+        secrets=build(config["secret_store"], services) if "secret_store" in config else NoSecrets(),
+    )
     destinations = {}
     for name, d in (config.get("destinations") or {}).items():
         destinations[name] = Destination(
@@ -141,6 +148,7 @@ def get_module() -> Module:
         default_destination=_subst(config["default_destination"]),
         dispatcher=_Unset(),  # replaced below: InlineDispatcher needs the module's `run`, which needs the module
         vendors=vendors,
+        keyring=keyring,
         deps=deps,
         claimer=OrmJobClaimer(max_attempts=max_attempts),
         site_url=settings.SITE_URL,

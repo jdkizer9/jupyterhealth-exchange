@@ -66,37 +66,48 @@
   "vendors": {
     "smart-public": {
       "client_id": "patient-access-sketch",
-      "auth_method": "public",
       "base_scopes": [
         "launch/patient",
         "openid",
         "fhirUser"
       ],
-      "profile": "smart-reference"
+      "profile": "smart-reference",
+      "auth_methods": [
+        {
+          "method": "public"
+        }
+      ]
     },
     "smart-symmetric": {
       "client_id": "patient-access-sketch",
-      "auth_method": "client_secret_basic",
-      "client_secret_env": "PA_SMART_SANDBOX_CLIENT_SECRET",
       "base_scopes": [
         "launch/patient",
         "openid",
         "fhirUser"
       ],
-      "profile": "smart-reference"
+      "profile": "smart-reference",
+      "auth_methods": [
+        {
+          "method": "client_secret_basic",
+          "secret": "smart-sandbox"
+        }
+      ]
     },
     "smart-asymmetric": {
       "client_id": "patient-access-sketch",
-      "auth_method": "private_key_jwt",
-      "private_key_path": "/code/compose/dev-keys/smart-client-dev.pem",
-      "key_id": "sketch-1",
-      "jwt_alg": "RS384",
       "base_scopes": [
         "launch/patient",
         "openid",
         "fhirUser"
       ],
-      "profile": "smart-reference"
+      "profile": "smart-reference",
+      "auth_methods": [
+        {
+          "method": "private_key_jwt",
+          "kid": "sketch-1",
+          "alg": "RS384"
+        }
+      ]
     }
   },
   "seed": {
@@ -209,5 +220,25 @@
         }
       }
     ]
+  },
+  "signing_keys": {
+    "class": "patient_access.credentials.env.EnvSigningKeys",
+    "options": {
+      "keys": [
+        {
+          "kid": "sketch-1",
+          "alg": "RS384",
+          "path": "/code/compose/dev-keys/smart-client-dev.pem"
+        }
+      ]
+    }
+  },
+  "secret_store": {
+    "class": "patient_access.credentials.env.EnvSecretStore",
+    "options": {
+      "names": {
+        "smart-sandbox": "PA_SMART_SANDBOX_CLIENT_SECRET"
+      }
+    }
   }
 }
