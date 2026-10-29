@@ -155,7 +155,7 @@ class AuthAttempt:
     scopes: list[str]
     redirect_uri: str
     token_endpoint: str
-    destinations: tuple[str, ...]  # resolved at launch; the resolver may add more at delivery
+    destinations: tuple[str, ...]  # decided at launch by the host; the job delivers to all of them
     created_at: datetime
     expires_at: datetime
     used_at: datetime | None = None

@@ -36,8 +36,8 @@ def fake_fetch(job, spool, settings, save):
     save()
 
 
-def make(sink=None, fetch=fake_fetch, expires=NOW + timedelta(hours=1), extra=None, resolver=None):
-    """One destination "mem"; `extra` adds more {name: Destination}; `resolver` replaces the static one."""
+def make(sink=None, fetch=fake_fetch, expires=NOW + timedelta(hours=1), extra=None):
+    """One destination "mem"; `extra` adds more {name: Destination}."""
     jobs, spool, sink = InMemoryJobStore(), InMemorySpool(), sink or MemorySink()
     destinations = {"mem": Destination("mem", PassthroughFormatter(), sink), **(extra or {})}
     deps = Deps(
@@ -47,7 +47,6 @@ def make(sink=None, fetch=fake_fetch, expires=NOW + timedelta(hours=1), extra=No
         directory=InMemoryDirectory(settings={"v": SETTINGS}),
         fetch=fetch,
         clock=lambda: NOW,
-        **({"resolver": resolver} if resolver else {}),
     )
     job = Job(
         id="j1",
@@ -258,18 +257,6 @@ def test_required_destination_giving_up_fails_the_job():
         job = run_job("j1", deps)
     assert job.status == JobStatus.FAILED_TERMINAL and job.deliveries["mem"].status == "done"
     assert not spool.spools
-
-
-def test_resolver_adds_destinations_at_delivery_time():
-    class Consented:
-        def resolve(self, job):
-            return ("s3",)
-
-    second = MemorySink()
-    deps, jobs, spool, first = make(resolver=Consented())
-    deps.destinations["s3"] = Destination("s3", PassthroughFormatter(), second)
-    job = run_job("j1", deps)
-    assert job.destinations == ("mem", "s3") and job.deliveries["s3"].status == "done"
 
 
 def test_content_policy_narrows_what_a_destination_gets():

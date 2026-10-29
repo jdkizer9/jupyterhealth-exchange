@@ -37,7 +37,7 @@ from patient_access.core.interfaces import (
     Spool,
 )
 from patient_access.core.models import ContentPolicy
-from patient_access.core.pipeline import Deps, Destination, StaticResolver, run_job, utcnow
+from patient_access.core.pipeline import Deps, Destination, run_job, utcnow
 from patient_access.core.puller import fetch
 from patient_access.core.source_settings import ConfigError, SourceSettings, load_vendors
 
@@ -91,7 +91,7 @@ class Module:
     jobs: JobStore
     spool: Spool
     destinations: dict[str, Destination]
-    default_destinations: tuple[str, ...]  # what a launch records; the resolver may add at delivery
+    default_destinations: tuple[str, ...]  # what every launch records; one list per deployment
     dispatcher: JobDispatcher
     vendors: dict[str, SourceSettings]
     keyring: Keyring  # signing keys and secrets; the host serves keyring.keys.public_jwks()
@@ -153,15 +153,8 @@ def get_module() -> Module:
     spool = build(config["spool"], services)
     directory = build(config["directory"], services)
     max_attempts = int(config.get("max_attempts", 3))
-    resolver = build(config["destination_resolver"], services) if "destination_resolver" in config else StaticResolver()
     deps = Deps(
-        jobs=jobs,
-        spool=spool,
-        destinations=destinations,
-        directory=directory,
-        fetch=fetch,
-        max_attempts=max_attempts,
-        resolver=resolver,
+        jobs=jobs, spool=spool, destinations=destinations, directory=directory, fetch=fetch, max_attempts=max_attempts
     )
     module = Module(
         config=config,

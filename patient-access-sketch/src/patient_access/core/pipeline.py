@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from .interfaces import DestinationResolver, Directory, Formatter, JobStore, Sink, Spool, SpoolHandle
+from .interfaces import Directory, Formatter, JobStore, Sink, Spool, SpoolHandle
 from .models import ContentPolicy, Delivery, Job, JobId, JobStatus, Receipt
 from .source_settings import ConfigError, SourceSettings
 
@@ -55,16 +55,6 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-class StaticResolver(DestinationResolver):
-    """Deliver to what the launch recorded (plus a fixed list, if given)."""
-
-    def __init__(self, always: tuple[str, ...] = ()):
-        self.always = always
-
-    def resolve(self, job: Job) -> tuple[str, ...]:
-        return self.always
-
-
 @dataclass
 class Deps:
     jobs: JobStore
@@ -74,7 +64,6 @@ class Deps:
     fetch: FetchFn
     clock: Callable[[], datetime] = utcnow
     max_attempts: int = 3  # per destination
-    resolver: DestinationResolver = field(default_factory=StaticResolver)
     on_event: Callable[[Job, str], None] = field(default=lambda job, event: None)
 
 
@@ -173,11 +162,8 @@ def _fetch(job: Job, handle: SpoolHandle, deps: Deps) -> None:
 def _deliver(job: Job, handle: SpoolHandle, deps: Deps) -> None:
     """Phases 5-6 for every destination (design §14): each gets its own formatter run, sink
     session, receipt and attempt count; one failing does not stop the next. Retry re-runs only
-    the deliveries that failed. The spool outlives every delivery and is deleted at the end."""
-    # The resolver may add destinations at delivery time (a consent given while queued).
-    for name in deps.resolver.resolve(job):
-        if name not in job.destinations:
-            job.destinations = (*job.destinations, name)
+    the deliveries that failed. The spool outlives every delivery and is deleted at the end.
+    The list of destinations is the one the launch recorded; nothing changes it in flight."""
     job.status = JobStatus.DELIVERING
     job.failure = None
     deps.jobs.save(job)

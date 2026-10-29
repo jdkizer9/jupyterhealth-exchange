@@ -541,8 +541,9 @@ Design §14. A job now carries `destinations` and a `deliveries` map; each desti
 own formatter run, sink session, attempt count and receipt, and one failing does not stop the
 next. Retry re-runs only the deliveries that failed; the spool and credentials are cleared when
 every delivery is terminal. `Destination.required` decides whether a destination that gives up
-fails the job or only itself. A `DestinationResolver` plug can add destinations at delivery
-time (the real build resolves per study from consents). `Destination.content` is a
+fails the job or only itself. The list of destinations is fixed at launch (one bucket per
+install, so every job goes to the same places; a delivery-time resolver was built and removed
+the same day for having no case). `Destination.content` is a
 `ContentPolicy` (documents on/off, resource-type allow/deny) that the formatter honours, so JHE
 can stop taking binaries without a second formatter. Every query-table row now appears in the
 outcomes: `not_requested` (unchecked at the checklist) and `not_granted` (withheld by the EHR).

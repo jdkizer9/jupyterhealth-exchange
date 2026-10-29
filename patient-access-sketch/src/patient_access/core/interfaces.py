@@ -134,14 +134,6 @@ class Formatter(Protocol):
         ...
 
 
-class DestinationResolver(Protocol):
-    def resolve(self, job: Job) -> tuple[str, ...]:
-        """Which configured destinations this job delivers to, asked at delivery time so a
-        consent added while the job was queued is picked up. The result is unioned with what the
-        launch recorded on the job."""
-        ...
-
-
 class SinkSession(Protocol):
     def write(self, unit: Unit, spool: SpoolHandle) -> UnitOutcome:
         """`spool` is passed so the sink can stream a unit's blobs without the formatter loading them."""
