@@ -10,9 +10,8 @@ from patient_access.core.interfaces import Sink, SinkSession
 from patient_access.core.models import Receipt, UnitOutcome
 from patient_access.destinations.jhe import tally_batch_response
 
-from core.models import DataSource, EhrBrandLocation, FhirSource, Patient, PatientIdentifier
+from core.models import FhirSource, Patient, PatientIdentifier
 from core.services.fhir_import import import_r4_bundle
-from core.services.fhir_source import get_or_create_ehr_source
 
 
 class JheDeliveryError(Exception):
@@ -39,22 +38,12 @@ class JheDirectSession(SinkSession):
         )
         if identifier.patient_id != self.patient.id:
             raise JheDeliveryError("This EHR patient is already linked to another JHE patient.")
-        # The callback created this pull's own FhirSource and put its id on the job; a job without
-        # one (older rows) falls back to the per-brand source.
-        fhir_source_id = job.participant.attrs.get("fhir_source_id")
-        if fhir_source_id:
-            self.fhir_source = FhirSource.objects.get(id=fhir_source_id, patient=self.patient)
-            self.source_created = False
-        else:
-            location = (
-                EhrBrandLocation.objects.filter(id=int(source.facility_id)).first() if source.facility_id else None
-            )
-            self.fhir_source, self.source_created = get_or_create_ehr_source(
-                self.patient,
-                DataSource.objects.get(id=job.participant.attrs["data_source_id"]),
-                ehr_brand_location=location,
-                base_url=source.iss,
-            )
+        # The callback created this pull's own FhirSource and put its id on the job.
+        try:
+            self.fhir_source = FhirSource.objects.get(id=job.participant.attrs["fhir_source_id"], patient=self.patient)
+        except (KeyError, FhirSource.DoesNotExist):
+            raise JheDeliveryError("this pull has no FhirSource of its own") from None
+        self.source_created = False
         self.units = self.ok = self.failed = 0
         self.reasons = {}
         self.warnings = {}

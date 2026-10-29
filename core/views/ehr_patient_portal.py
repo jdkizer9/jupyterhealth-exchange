@@ -1,19 +1,13 @@
 import logging
-from urllib.parse import urlencode
 
-from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.urls import reverse
-from patient_access.core.flow import FlowError, finish_upstream_auth
-from patient_access.django_apps.jobs.dispatch import OnCommitDispatcher
-from patient_access.django_apps.jobs.wiring import get_module
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import OW_USER_ID_SYSTEM, DataSource, EhrBrandLocation, EhrVendor, Patient, PatientIdentifier
-from core.services.fhir_source import create_pull_fhir_source
+from core.models import OW_USER_ID_SYSTEM, EhrBrandLocation, EhrVendor, PatientIdentifier
 from core.views.patient_facing import patient_facing_config
 
 logger = logging.getLogger(__name__)
@@ -98,54 +92,8 @@ def ehr_patient_portal_connect(request):
 
 
 def ehr_patient_portal_callback(request):
-    """The EHR's return URL (registered with Epic, so the path stays): the Patient Access Module
-    exchanges the code server-side, creates the job and starts it, then the portal's status
-    screen follows it. Errors go to the portal's error route."""
-    page = reverse("ehr-patient-portal-connect")
-    m = get_module()
-    try:
-        # One transaction: the attempt is spent and the job created together; the thread starts on commit.
-        with transaction.atomic():
-            job_id = finish_upstream_auth(
-                state=request.GET.get("state", ""),
-                code=request.GET.get("code"),
-                error=request.GET.get("error"),
-                error_description=request.GET.get("error_description"),
-                directory=m.directory,
-                keyring=m.keyring,
-                attempts=m.auth_attempts,
-                identity=m.identity,
-                jobs=m.jobs,
-                dispatcher=OnCommitDispatcher(m.dispatcher),
-                http=m.http,
-                clock=m.clock,
-            )
-            # Same transaction: the pull's own FhirSource, created now so its id is on the job
-            # before any sink runs (the S3 key is {patient_id}/{fhir_source_id}).
-            job = m.jobs.get(job_id)
-            patient = Patient.objects.get(id=int(job.participant.ref))
-            location = (
-                EhrBrandLocation.objects.filter(id=int(job.source.facility_id)).first()
-                if job.source.facility_id
-                else None
-            )
-            fhir_source = create_pull_fhir_source(
-                patient,
-                DataSource.objects.get(id=job.participant.attrs["data_source_id"]),
-                ehr_brand_location=location,
-                base_url=job.source.iss,
-                when=job.created_at,
-            )
-            job.participant.attrs["patient_id"] = patient.id
-            job.participant.attrs["fhir_source_id"] = fhir_source.id
-            m.jobs.save(job)
-    except FlowError as e:
-        query = urlencode(
-            {"route": "error", "title": "We couldn't connect to your healthcare organization", "message": str(e)}
-        )
-        return redirect(f"{page}?{query}")
-    data_source_id = m.jobs.get(job_id).participant.attrs.get("data_source_id")
-    return redirect(f"{page}?{urlencode({'route': 'status', 'job': job_id, 'source': data_source_id})}")
+    """Epic's return page: finish the SMART handshake, import the records, then hand off to the done screen."""
+    return render(request, "clients/ehr-patient-portal/callback.html", {"config": _config()})
 
 
 def _parse_limit(raw):

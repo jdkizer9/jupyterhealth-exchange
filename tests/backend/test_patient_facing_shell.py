@@ -45,8 +45,7 @@ def test_ehr_connect_is_a_shell_configured_from_the_ehr_client(seeded, client):
     ehr = DataSource.objects.get(name="EHR Patient Portal")
 
     _assert_shell(html, "t-connect", "patientApp()")
-    # Sketch (scenario D): no fhir-client.js; the server runs the SMART flow.
-    assert "fhir-client.min.js" not in html and "client-ehr-patient-portal.js" in html
+    assert "fhir-client.min.js" in html and "client-ehr-patient-portal.js" in html
     config = _config(html)
     assert config["client"] == "ehr-patient-portal" and config["pageUrl"] == "/clients/ehr-patient-portal/"
     # clientId/scope are no longer known at page-load: each EhrBrand carries its own, resolved
@@ -62,10 +61,11 @@ def test_expected_resource_types_lists_only_patient_read_scopes():
     assert _expected_resource_types(scopes) == ["Condition", "Patient"]
 
 
-def test_ehr_callback_is_no_longer_a_page(seeded, client):
-    # Sketch (scenario D): the server finishes the EHR sign-in and redirects into the portal.
-    resp = client.get("/clients/ehr-patient-portal/callback?state=unknown&code=c")
-    assert resp.status_code == 302 and "route=error" in resp["Location"]
+def test_ehr_callback_is_a_shell_that_runs_the_import(seeded, client):
+    html = client.get("/clients/ehr-patient-portal/callback").content.decode()
+    _assert_shell(html, "t-connect", "eppCallback()")
+    assert _config(html)["pageUrl"] == "/clients/ehr-patient-portal/"
+    assert "patientApp()" not in html
 
 
 def test_config_has_no_data_sources_when_the_client_link_is_missing(db, client):

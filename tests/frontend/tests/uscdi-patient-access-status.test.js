@@ -14,7 +14,7 @@ beforeAll(() => {
   global.Handlebars = require(path.join(STATIC, "common/js/handlebars.min.js"));
   require(path.join(STATIC, "common/js/common.js"));
   require(path.join(STATIC, "common/js/patient-facing.js"));
-  require("../../../core/static/clients/ehr-patient-portal/js/client-ehr-patient-portal.js");
+  require("../../../core/static/clients/uscdi-patient-access/js/client-uscdi-patient-access.js");
 });
 
 const JOB = {
@@ -45,7 +45,7 @@ beforeEach(() => {
     componentHtml(path.join(TEMPLATES, "common/patient_facing/components/importing.html")) +
     componentHtml(path.join(TEMPLATES, "common/patient_facing/components/error.html"));
   window.pfRegisterPartials();
-  global.PATIENT_FACING_CONFIG = { dataSourceIds: [5], pageUrl: "/clients/ehr-patient-portal/", siteTitle: "T", expectedResourceTypes: [] };
+  global.PATIENT_FACING_CONFIG = { dataSourceIds: [5], pageUrl: "/clients/uscdi-patient-access/", siteTitle: "T", expectedResourceTypes: [] };
   window.storeToken("tok");
 });
 
@@ -99,7 +99,7 @@ describe("the status route", () => {
     await window.eppStatus({ job: "j1", source: "5" });
 
     const [url, opts] = global.fetch.mock.calls[0];
-    expect(url).toContain("/api/v1/patient-access/jobs/j1");
+    expect(url).toContain("/api/v1/uscdi-patient-access/jobs/j1");
     expect(opts.headers.Authorization).toBe("Bearer tok");
     expect(nav).toHaveBeenCalledWith("done", { source: "5" }, true);
     nav.mockRestore();

@@ -64,7 +64,7 @@ urlpatterns = [
     ),
     path(".well-known/assetlinks.json", common.assetlinks, name="assetlinks"),
     # Patient Access Module client keys (sketch): the JWK Set URL registered with EHR vendors.
-    path(".well-known/jwks.json", patient_access.jwks, name="patient-access-jwks"),
+    path(".well-known/jwks.json", patient_access.jwks, name="uscdi-patient-access-jwks"),
     # Home
     path("", common.home, name="home"),
     # Django auth and accounts
@@ -115,9 +115,12 @@ urlpatterns = [
         name="ehr-patient-portal-callback",
     ),
     path("api/v1/ehr-patient-portal/brands", ehr_patient_portal.brands_search, name="ehr-patient-portal-brands"),
-    # Patient Access Module (sketch, scenario D): server-side SMART launch and the job's status.
-    path("api/v1/patient-access/launch", patient_access.launch, name="patient-access-launch"),
-    path("api/v1/patient-access/jobs/<str:job_id>", patient_access.job_status, name="patient-access-job"),
+    # USCDI Patient Access (sketch): a second client beside the EHR Patient Portal, server-side
+    # pull via the Patient Access Module. Its callback path is registered with Epic separately.
+    path("clients/uscdi-patient-access/", patient_access.connect, name="uscdi-patient-access-connect"),
+    path("clients/uscdi-patient-access/callback", patient_access.callback, name="uscdi-patient-access-callback"),
+    path("api/v1/uscdi-patient-access/launch", patient_access.launch, name="uscdi-patient-access-launch"),
+    path("api/v1/uscdi-patient-access/jobs/<str:job_id>", patient_access.job_status, name="uscdi-patient-access-job"),
     path(
         "api/v1/ehr-patient-portal/identifier",
         ehr_patient_portal.save_patient_identifier,

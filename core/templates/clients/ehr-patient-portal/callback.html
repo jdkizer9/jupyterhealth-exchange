@@ -1,0 +1,4 @@
+{% extends "clients/ehr-patient-portal/base.html" %}
+{% block title %}Importing records{% endblock %}
+{% block pf_components %}{% include "clients/ehr-patient-portal/components/connect.html" %}{% endblock %}
+{% block pf_start %}<script>eppCallback()</script>{% endblock %}

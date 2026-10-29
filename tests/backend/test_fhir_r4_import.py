@@ -7,6 +7,8 @@ provenance).
 """
 
 import json
+import pathlib
+import re
 import uuid
 
 import pytest
@@ -747,12 +749,15 @@ def test_import_bundle_reports_per_entry_error(api_client, patient, fhir_source)
 # have a matching entry in EhrBrand.SUPPORTED_SCOPES. These are the invariants RFC 0003 states.
 # ---------------------------------------------------------------------------
 
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_CLIENT_JS = _REPO_ROOT / "core" / "static" / "clients" / "ehr-patient-portal" / "js" / "client-ehr-patient-portal.js"
+
 
 def _pulled_types():
-    # Sketch (scenario D): the pulls are the Patient Access Module's USCDI profile, in code.
-    from patient_access.core.profiles import USCDI
-
-    return {row.resource_type for row in USCDI}
+    text = _CLIENT_JS.read_text()
+    match = re.search(r"const EHR_PATIENT_PORTAL_PULLS = \[(.*?)\n\];", text, re.DOTALL)
+    assert match, "EHR_PATIENT_PORTAL_PULLS not found in client-ehr-patient-portal.js — was it renamed or reformatted?"
+    return set(re.findall(r'type: "(\w+)"', match.group(1)))
 
 
 # Minimal Epic-shaped R4 instance per pulled type (Patient/Condition/Observation etc. are
@@ -814,7 +819,7 @@ _MINIMAL_PULL_R4 = {
 
 def test_pull_list_fixture_coverage_matches_client():
     assert _pulled_types() == set(_MINIMAL_PULL_R4), (
-        "The Patient Access query table and _MINIMAL_PULL_R4 diverged - add/remove the fixture "
+        "EHR_PATIENT_PORTAL_PULLS and _MINIMAL_PULL_R4 diverged - add/remove the fixture "
         "so every pulled type stays convert+validate guarded"
     )
 
@@ -832,7 +837,7 @@ def test_pulled_types_match_supported_scopes_catalog():
     from core.models import EhrVendor
 
     scoped = {token.removeprefix("patient/").removesuffix(".read") for token in EhrVendor.SUPPORTED_SCOPES}
-    assert scoped == _pulled_types(), "EhrVendor.SUPPORTED_SCOPES and the Patient Access query table diverged"
+    assert scoped == _pulled_types(), "EhrVendor.SUPPORTED_SCOPES and EHR_PATIENT_PORTAL_PULLS diverged"
 
 
 def test_scope_migration_still_applies_to_a_historical_deployed_row(db):

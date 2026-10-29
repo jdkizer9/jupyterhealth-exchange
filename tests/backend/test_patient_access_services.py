@@ -5,7 +5,6 @@ import pytest
 
 from core.models import EhrBrand, EhrBrandLocation, EhrVendor, FhirAuxResource, FhirSource, JheUser
 from core.services.fhir_import import import_r4_bundle
-from core.services.fhir_source import get_or_create_ehr_source
 
 CONDITION = {
     "resourceType": "Condition",
@@ -23,20 +22,6 @@ def location(db):
     vendor = EhrVendor.objects.create(name="SMART Sandbox")
     brand = EhrBrand.objects.create(name="Sandbox Health", vendor=vendor, fhir_base_url="https://ehr.example/fhir")
     return EhrBrandLocation.objects.create(brand=brand, name="Sandbox Clinic")
-
-
-def test_ehr_source_is_reused_per_brand(patient, device, location):
-    first, created = get_or_create_ehr_source(patient, device, ehr_brand_location=location)
-    assert created and first.label == "SMART Sandbox - Sandbox Health"
-    # Reconnecting through the iss alone (no facility picked) finds the same brand's source.
-    again, created = get_or_create_ehr_source(patient, device, base_url="https://ehr.example/fhir/")
-    assert not created and again.id == first.id
-
-
-def test_source_without_a_brand_always_creates(patient, device):
-    a, _ = get_or_create_ehr_source(patient, device, label="one-off")
-    b, _ = get_or_create_ehr_source(patient, device, label="one-off")
-    assert a.id != b.id
 
 
 def test_import_r4_bundle_in_process(patient, device):

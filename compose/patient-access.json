@@ -51,7 +51,7 @@
       "lease_seconds": 600
     }
   },
-  "redirect_uri": "${SITE_URL}/clients/ehr-patient-portal/callback",
+  "redirect_uri": "${SITE_URL}/clients/uscdi-patient-access/callback",
   "max_attempts": 3,
   "vendors": {
     "Epic Sandbox": {
