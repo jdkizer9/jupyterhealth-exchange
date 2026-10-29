@@ -1,4 +1,4 @@
-"""The Patient Access Module's FhirSource per pull (sketch; additive to the FhirSource API, which is
+"""The Patient Access Module's FhirSource for a pull (sketch; additive to the FhirSource API, which is
 untouched). `resolve_brand` mirrors FhirSourceViewSet._resolve_brand so this module stands alone."""
 
 from django.db.models import Q
@@ -19,14 +19,21 @@ def resolve_brand(location, base_url):
     return EhrBrand.objects.filter(Q(fhir_base_url=base_url) | Q(fhir_base_url=base_url + "/")).order_by("id").first()
 
 
-def create_pull_fhir_source(patient, data_source, ehr_brand_location=None, base_url="", when=None):
-    """One FhirSource per pull (Patient Access, design §14 / partner PRD §5.5): the pull's records
-    live under their own source, and its id names the pull in the study's bucket
-    (`{patient_id}/{fhir_source_id}`). Never reused across pulls, unlike get_or_create_ehr_source."""
+def get_or_create_pull_fhir_source(patient, data_source, ehr_brand_location=None, base_url=""):
+    """The FhirSource a pull delivers under: the patient's existing one for the same EHR brand and
+    data source, else a new one (the FhirSource API's rule, so a reconnect does not stack a second
+    copy of every record under a fresh source). Returns ``(source, created)``. Pulls under the same
+    source are told apart in the bucket by the key's timestamp: `{patient_id}/{fhir_source_id}/{timestamp}`."""
     brand = resolve_brand(ehr_brand_location, base_url)
-    label = " - ".join(filter(None, [brand.vendor.name if brand else None, brand.name if brand else None]))
-    if when is not None:
-        label = f"{label} - {when:%Y-%m-%d %H:%M}" if label else f"Pull {when:%Y-%m-%d %H:%M}"
+    if brand is not None:
+        existing = (
+            FhirSource.objects.filter(patient=patient, data_source=data_source, ehr_brand_location__brand=brand)
+            .order_by("id")
+            .first()
+        )
+        if existing is not None:
+            return existing, False
+    label = " - ".join(filter(None, [brand.vendor.name, brand.name])) if brand else "EHR pull"
     return FhirSource.objects.create(
-        patient=patient, data_source=data_source, label=label or "EHR pull", ehr_brand_location=ehr_brand_location
-    )
+        patient=patient, data_source=data_source, label=label, ehr_brand_location=ehr_brand_location
+    ), True

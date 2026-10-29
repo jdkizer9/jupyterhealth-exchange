@@ -28,7 +28,7 @@ from rest_framework.response import Response
 
 from core.models import DataSource, EhrBrandLocation, EhrVendor, Patient
 from core.patient_access.identity import PROVIDER, participant_for
-from core.services.fhir_source import create_pull_fhir_source
+from core.services.fhir_source import get_or_create_pull_fhir_source
 from core.views.patient_facing import patient_facing_config
 
 CLIENT_NAME = "USCDI Patient Access"
@@ -112,8 +112,9 @@ def callback(request):
                 http=m.http,
                 clock=m.clock,
             )
-            # The pull's own FhirSource, created now so its id is on the job before any sink
-            # runs: the S3 key is {patient_id}/{fhir_source_id} and JHE's import lands under it.
+            # The pull's FhirSource (the patient's existing one for this brand, else new), settled
+            # now so its id is on the job before any sink runs: the S3 key is
+            # {patient_id}/{fhir_source_id}/{timestamp} and JHE's import lands under it.
             job = m.jobs.get(job_id)
             patient = Patient.objects.get(id=int(job.participant.ref))
             location = (
@@ -121,12 +122,11 @@ def callback(request):
                 if job.source.facility_id
                 else None
             )
-            fhir_source = create_pull_fhir_source(
+            fhir_source, _ = get_or_create_pull_fhir_source(
                 patient,
                 DataSource.objects.get(id=job.participant.attrs["data_source_id"]),
                 ehr_brand_location=location,
                 base_url=job.source.iss,
-                when=job.created_at,
             )
             job.participant.attrs["patient_id"] = patient.id
             job.participant.attrs["fhir_source_id"] = fhir_source.id

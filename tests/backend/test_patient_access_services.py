@@ -42,13 +42,11 @@ def test_import_refuses_someone_elses_source(patient, device):
     assert not FhirAuxResource.objects.filter(fhir_source=source).exists()
 
 
-def test_pull_fhir_source_is_new_every_time(patient, device, location):
-    from datetime import UTC, datetime
+def test_pull_fhir_source_is_reused_per_brand(patient, device, location):
+    from core.services.fhir_source import get_or_create_pull_fhir_source
 
-    from core.services.fhir_source import create_pull_fhir_source
-
-    when = datetime(2026, 10, 29, 14, 5, tzinfo=UTC)
-    a = create_pull_fhir_source(patient, device, ehr_brand_location=location, when=when)
-    b = create_pull_fhir_source(patient, device, ehr_brand_location=location, when=when)
-    assert a.id != b.id and a.ehr_brand_location_id == location.id
-    assert a.label == "SMART Sandbox - Sandbox Health - 2026-10-29 14:05"
+    first, created = get_or_create_pull_fhir_source(patient, device, ehr_brand_location=location)
+    assert created and first.label == "SMART Sandbox - Sandbox Health"
+    # Reconnecting through the iss alone (no facility picked) finds the same brand's source.
+    again, created = get_or_create_pull_fhir_source(patient, device, base_url="https://ehr.example/fhir/")
+    assert not created and again.id == first.id
