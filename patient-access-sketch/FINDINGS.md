@@ -513,3 +513,24 @@ Found along the way:
    test image inherits both.
 7. **Spool on Fly is per machine**: a job the cron machine resumes after a web restart finds no
    spool and refetches (the token is kept until the job finishes, so it can). Fine; just slower.
+
+## Post-sketch: directory and credentials reshaped (2026-10-28)
+
+The flat `Location` became the User-access Brands shape: `Selection` (a `Brand` on an
+`Endpoint`, at an optional `Facility`), with the Endpoint carrying the customer (Epic's
+`managingOrganization`). A survey of Epic's bundle motivated it: 1,291 brands share 777
+base URLs (one Providence URL serves 42 brands) across 459 customers, and keying brands on the
+base URL collapses them. Vendor settings are now part of the directory:
+`settings_for(endpoint)` returns a `ClientRegistration` (client id, auth methods in preference
+order, scope form) and a `FetchProfile` (query table, limits, documents). Query tables moved
+from config into code as named profiles; vendor, customer and endpoint overrides share one
+format, merged inside the directory.
+
+Credentials are plugs: `SigningKeys` (`sign(kid, claims, alg)`, `public_jwks`) and
+`SecretStore` (`get(name)`), env-backed by default. A registration names its material; rows
+record only the method and `kid` used. The launch takes the first usable method; discovery
+(cached per base URL) checks advertised methods and algorithms but does not decide, because
+Epic advertises all three methods at every one of the 771 servers that answered a survey of
+its bundle. Both hosts serve `/.well-known/jwks.json`. Public, `client_secret_basic` and
+`private_key_jwt` pass end to end against the SMART sandbox; JHE scenario D delivers 2,121
+records.
