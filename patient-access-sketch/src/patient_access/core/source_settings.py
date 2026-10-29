@@ -173,7 +173,7 @@ def load_vendors(
             raise ConfigError(f"vendor {name}: auth_methods is empty")
         registration = ClientRegistration(
             vendor=name,
-            client_id=raw.pop("client_id"),
+            client_id=raw.pop("client_id", ""),  # empty: the directory fills it in (JHE: from EhrVendor)
             methods=methods,
             base_scopes=tuple(raw.pop("base_scopes", ClientRegistration.base_scopes)),
             scope_version=raw.pop("scope_version", "v1"),

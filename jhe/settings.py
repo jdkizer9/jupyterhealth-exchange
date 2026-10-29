@@ -118,10 +118,9 @@ PATIENT_ACCESS = {
     "DEFAULT_DESTINATIONS": ["jhe", "s3"],
     "REDIRECT_URI": f"{SITE_URL}/clients/uscdi-patient-access/callback",
     "VENDORS": {
-        # Keyed by JHE's EhrVendor names. The USCDI client has its own Epic app, so its client id
-        # lives here, not on the EhrVendor row the EHR Patient Portal uses.
+        # Keyed by JHE's EhrVendor names. No client id here: the USCDI client shares the EHR
+        # Patient Portal's Epic app, so the directory takes it from the EhrVendor row.
         "Epic Sandbox": {
-            "client_id": os.getenv("PATIENT_ACCESS_EPIC_SANDBOX_CLIENT_ID", ""),
             "auth_methods": [{"method": "public"}],
             "profile": "epic",
             "base_scopes": ["openid", "profile", "launch/patient"],

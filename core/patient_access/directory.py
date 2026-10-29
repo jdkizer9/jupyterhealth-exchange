@@ -7,6 +7,7 @@ Vendor settings come from the deployment config's `vendors` section, keyed by JH
 """
 
 from collections.abc import Mapping
+from dataclasses import replace
 
 from django.db.models import Q
 from patient_access.core.interfaces import Directory
@@ -14,7 +15,7 @@ from patient_access.core.models import Brand, Endpoint, Facility, ImportCounts, 
 from patient_access.core.source_settings import SourceSettings
 
 from core.management.commands.import_ehr_brands import import_brands_bundle
-from core.models import EhrBrandLocation
+from core.models import EhrBrandLocation, EhrVendor
 
 
 def _selection(loc):
@@ -58,7 +59,15 @@ class JheOrmDirectory(Directory):
             raise KeyError(selection_id) from None
 
     def settings_for(self, endpoint):
-        return self.vendors[endpoint.vendor]  # KeyError: JHE vendor without a registration in the config
+        base = self.vendors[endpoint.vendor]  # KeyError: JHE vendor without a PATIENT_ACCESS["VENDORS"] entry
+        if base.registration.client_id:
+            return base
+        # The settings entry names no client id: use the one JHE keeps on the EhrVendor row (the
+        # same Epic app registration the EHR Patient Portal uses).
+        row = EhrVendor.objects.filter(name=endpoint.vendor).first()
+        if row is None or not row.ehr_client_id:
+            raise KeyError(endpoint.vendor)
+        return replace(base, registration=replace(base.registration, client_id=row.ehr_client_id))
 
     def upsert_brands_bundle(self, bundle, vendor):
         # JHE's importer picks the vendor itself (Epic Sandbox / Epic Production), so `vendor` is unused.
