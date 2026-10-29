@@ -1,32 +1,45 @@
-"""The module's Directory over JHE's EhrVendor / EhrBrand / EhrBrandLocation tables."""
+"""The module's Directory over JHE's EhrVendor / EhrBrand / EhrBrandLocation tables.
+
+JHE's schema has three levels (vendor, brand-with-base-URL, location), so the module's endpoint
+is the brand (one base URL each) and there is no customer; see Simon Q12 for the schema that
+would carry both. Selection ids are JHE location pks, which is what the portal JS already sends.
+Vendor settings come from the deployment config's `vendors` section, keyed by JHE's vendor names.
+"""
+
+from collections.abc import Mapping
 
 from django.db.models import Q
 from patient_access.core.interfaces import Directory
-from patient_access.core.models import ImportCounts, Location
+from patient_access.core.models import Brand, Endpoint, Facility, ImportCounts, Selection
+from patient_access.core.source_settings import SourceSettings
 
 from core.management.commands.import_ehr_brands import import_brands_bundle
 from core.models import EhrBrandLocation
 
 
-def _location(loc):
+def _selection(loc):
     brand = loc.brand
-    return Location(
+    endpoint = Endpoint(
+        id=str(brand.id), iss=brand.fhir_base_url, vendor=brand.vendor.name, fhir_version=brand.fhir_version
+    )
+    return Selection(
         id=str(loc.id),
-        name=loc.name,
-        address=loc.address_text,
-        city=loc.city,
-        state=loc.state,
-        postal_code=loc.postal_code,
-        brand_id=str(brand.id),
-        brand_name=brand.name,
-        iss=brand.fhir_base_url,
-        brand_npi=brand.npi_type_2 or None,
-        # The module's vendor config is keyed by JHE's vendor names ("Epic Sandbox", "SMART Sandbox").
-        vendor=brand.vendor.name,
+        brand=Brand(id=str(brand.id), name=brand.name, endpoint=endpoint, npi=brand.npi_type_2 or None),
+        facility=Facility(
+            id=str(loc.id),
+            name=loc.name,
+            address=loc.address_text,
+            city=loc.city,
+            state=loc.state,
+            postal_code=loc.postal_code,
+        ),
     )
 
 
 class JheOrmDirectory(Directory):
+    def __init__(self, vendors: Mapping[str, SourceSettings]):
+        self.vendors = vendors
+
     def search(self, q, state=None, postal=None, limit=25):
         # JHE's picker uses its own /api/v1/ehr-patient-portal/brands; this is for the module's callers.
         qs = EhrBrandLocation.objects.select_related("brand__vendor")
@@ -36,13 +49,16 @@ class JheOrmDirectory(Directory):
             qs = qs.filter(state__iexact=state)
         if postal:
             qs = qs.filter(postal_code__startswith=postal)
-        return [_location(loc) for loc in qs.order_by("name")[:limit]]
+        return [_selection(loc) for loc in qs.order_by("name")[:limit]]
 
-    def location(self, location_id):
+    def selection(self, selection_id):
         try:
-            return _location(EhrBrandLocation.objects.select_related("brand__vendor").get(id=int(location_id)))
+            return _selection(EhrBrandLocation.objects.select_related("brand__vendor").get(id=int(selection_id)))
         except (EhrBrandLocation.DoesNotExist, ValueError, TypeError):
-            raise KeyError(location_id) from None
+            raise KeyError(selection_id) from None
+
+    def settings_for(self, endpoint):
+        return self.vendors[endpoint.vendor]  # KeyError: JHE vendor without a registration in the config
 
     def upsert_brands_bundle(self, bundle, vendor):
         # JHE's importer picks the vendor itself (Epic Sandbox / Epic Production), so `vendor` is unused.

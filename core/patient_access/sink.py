@@ -39,7 +39,7 @@ class JheDirectSession(SinkSession):
         )
         if identifier.patient_id != self.patient.id:
             raise JheDeliveryError("This EHR patient is already linked to another JHE patient.")
-        location = EhrBrandLocation.objects.filter(id=int(source.location_id)).first()
+        location = EhrBrandLocation.objects.filter(id=int(source.facility_id)).first() if source.facility_id else None
         self.fhir_source, self.source_created = get_or_create_ehr_source(
             self.patient,
             DataSource.objects.get(id=job.participant.attrs["data_source_id"]),

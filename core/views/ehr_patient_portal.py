@@ -111,7 +111,6 @@ def ehr_patient_portal_callback(request):
                 error=request.GET.get("error"),
                 error_description=request.GET.get("error_description"),
                 directory=m.directory,
-                vendors=m.vendors,
                 attempts=m.auth_attempts,
                 identity=m.identity,
                 jobs=m.jobs,

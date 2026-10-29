@@ -7,7 +7,6 @@ provenance).
 """
 
 import json
-import pathlib
 import uuid
 
 import pytest
@@ -748,13 +747,12 @@ def test_import_bundle_reports_per_entry_error(api_client, patient, fhir_source)
 # have a matching entry in EhrBrand.SUPPORTED_SCOPES. These are the invariants RFC 0003 states.
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-# Sketch (scenario D): the pulls are the Patient Access Module's query table, in its config.
-_PA_CONFIG = _REPO_ROOT / "compose" / "patient-access.json"
-
 
 def _pulled_types():
-    return {row["resource_type"] for row in json.loads(_PA_CONFIG.read_text())["query_tables"]["uscdi"]}
+    # Sketch (scenario D): the pulls are the Patient Access Module's USCDI profile, in code.
+    from patient_access.core.profiles import USCDI
+
+    return {row.resource_type for row in USCDI}
 
 
 # Minimal Epic-shaped R4 instance per pulled type (Patient/Condition/Observation etc. are

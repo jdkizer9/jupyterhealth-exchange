@@ -33,9 +33,8 @@ def launch(request):
     try:
         url = start_upstream_auth(
             participant=participant_for(patient, data_source_id),
-            location_id=str(request.data.get("location_id", "")),
+            selection_id=str(request.data.get("location_id", "")),
             directory=m.directory,
-            vendors=m.vendors,
             attempts=m.auth_attempts,
             redirect_uri=m.redirect_uri,
             destination=m.default_destination,
@@ -55,7 +54,7 @@ def job_json(job):
         "status": str(job.status),
         "terminal": job.status.terminal,
         "data_source_id": job.participant.attrs.get("data_source_id"),
-        "source": {"brand": job.source.brand_name, "location": job.source.location_name},
+        "source": {"brand": job.source.brand_name, "location": job.source.facility_name},
         "types": [{"label": o.label, "status": o.status, "count": o.count, "error": o.error} for o in job.outcomes],
         "receipt": (
             {
