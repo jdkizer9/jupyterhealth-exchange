@@ -3,7 +3,7 @@ project's settings.py, merged over `DEFAULTS` here and read lazily (so `override
 works and nothing is read at import time).
 
     PATIENT_ACCESS = {
-        "DEPLOYMENT_KEY": os.environ["PATIENT_ACCESS_DEPLOYMENT_KEY"],   # Fernet, credentials at rest
+        "ENCRYPTION_KEYS": os.environ["PATIENT_ACCESS_ENCRYPTION_KEYS"].split(","),  # Fernet, at rest; first encrypts
         "IDENTITY":  {"class": "core.patient_access.identity.JheUserIdentity"},
         "DIRECTORY": {"class": "core.patient_access.directory.JheOrmDirectory"},
         "SPOOL":     {"class": "patient_access.spool.local_disk.LocalDiskSpool", "options": {"root": "/data/pa"}},
@@ -33,7 +33,7 @@ from django.core.signals import setting_changed
 from patient_access.core.source_settings import ConfigError
 
 DEFAULTS: dict[str, Any] = {
-    "DEPLOYMENT_KEY": None,
+    "ENCRYPTION_KEYS": None,  # list of Fernet keys; see crypto.py for rotation
     "SITE_URL": None,  # falls back to settings.SITE_URL
     "IDENTITY": None,
     "DIRECTORY": None,
@@ -48,7 +48,7 @@ DEFAULTS: dict[str, Any] = {
     "MAX_ATTEMPTS": 3,
     "SEED": {},
 }
-REQUIRED = ("DEPLOYMENT_KEY", "IDENTITY", "DIRECTORY", "SPOOL")
+REQUIRED = ("ENCRYPTION_KEYS", "IDENTITY", "DIRECTORY", "SPOOL")
 
 
 class PatientAccessSettings:
@@ -87,9 +87,11 @@ patient_access_settings = PatientAccessSettings()
 def _on_setting_changed(*, setting: str, **kwargs: Any) -> None:
     if setting in ("PATIENT_ACCESS", "SITE_URL"):
         patient_access_settings.reload()
+        from .crypto import _fernet
         from .wiring import get_module
 
         get_module.cache_clear()
+        _fernet.cache_clear()
 
 
 setting_changed.connect(_on_setting_changed)

@@ -21,8 +21,9 @@ x-pa-environment: &pa-environment
   DJANGO_SETTINGS_MODULE: server.settings
   PA_DEBUG: "1"
   PA_SECRET_KEY: dev-only-patient-access-sketch-django-secret-key-not-for-real-use
-  # Fernet key that encrypts EHR tokens, participant secrets and per-job spool keys at rest.
-  PA_DEPLOYMENT_KEY: 2cw8G2XTqJThyRDiiKGLg7kt_vSCKqOcEXxFCQtcAy4=
+  # Fernet keys (comma-separated, first encrypts) for EHR tokens, PKCE verifiers, participant
+  # secrets and per-job spool keys at rest.
+  PA_ENCRYPTION_KEYS: 2cw8G2XTqJThyRDiiKGLg7kt_vSCKqOcEXxFCQtcAy4=
   # Aliases, not service names: scenario B joins JHE's network, where `db` is JHE's Postgres.
   PA_DB_HOST: pa-db
   PA_DB_PORT: "5432"

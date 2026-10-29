@@ -72,3 +72,26 @@ def test_save_does_not_touch_the_lease():
     job.status = JobStatus.FETCHING
     store.save(job)
     assert JobRecord.objects.get(id=job_id).lease_owner == "w1"
+
+
+def test_encryption_keys_rotate(settings):
+    """Prepending a new key re-encrypts new writes while old rows still decrypt."""
+    from cryptography.fernet import Fernet, InvalidToken
+
+    old_keys = list(settings.PATIENT_ACCESS["ENCRYPTION_KEYS"])
+    store = OrmJobStore()
+    job_id = store.create(_job(credentials=Secrets({"ehr_access_token": "OLD"})))
+    before = JobRecord.objects.get(id=job_id).credentials_enc
+
+    new_key = Fernet.generate_key().decode()
+    settings.PATIENT_ACCESS = {**settings.PATIENT_ACCESS, "ENCRYPTION_KEYS": [new_key, *old_keys]}
+    assert store.get(job_id).credentials["ehr_access_token"] == "OLD"  # old key still decrypts
+    job2 = store.get(job_id)
+    store.save(job2)
+    after = JobRecord.objects.get(id=job_id).credentials_enc
+    assert after != before  # re-saved under the new first key
+    assert store.get(job_id).credentials["ehr_access_token"] == "OLD"
+
+    settings.PATIENT_ACCESS = {**settings.PATIENT_ACCESS, "ENCRYPTION_KEYS": old_keys}
+    with pytest.raises(InvalidToken):
+        store.get(job_id)  # the new key is gone; the row written under it is unreadable

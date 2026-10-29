@@ -84,7 +84,8 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # here: compose/environment/jhe.env carries the dev values.
 _PA_KEYS = str(BASE_DIR / "patient-access-sketch" / "compose" / "dev-keys")
 PATIENT_ACCESS = {
-    "DEPLOYMENT_KEY": os.getenv("PATIENT_ACCESS_DEPLOYMENT_KEY"),  # Fernet: tokens and verifiers at rest
+    # Fernet keys, comma-separated, first encrypts: EHR tokens and PKCE verifiers at rest.
+    "ENCRYPTION_KEYS": [k for k in os.getenv("PATIENT_ACCESS_ENCRYPTION_KEYS", "").split(",") if k],
     "IDENTITY": {"class": "core.patient_access.identity.JheUserIdentity"},
     "DIRECTORY": {"class": "core.patient_access.directory.JheOrmDirectory"},
     "SPOOL": {

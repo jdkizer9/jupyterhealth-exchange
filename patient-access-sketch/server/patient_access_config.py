@@ -25,7 +25,7 @@ def base() -> dict[str, Any]:
     out_dir, spool_dir, s3_endpoint = _env("PA_OUT_DIR"), _env("PA_SPOOL_DIR"), _env("PA_S3_ENDPOINT")
     s3 = {"endpoint_url": s3_endpoint, "access_key": _env("PA_S3_ACCESS_KEY"), "secret_key": _env("PA_S3_SECRET_KEY")}
     return {
-        "DEPLOYMENT_KEY": _env("PA_DEPLOYMENT_KEY"),
+        "ENCRYPTION_KEYS": _env("PA_ENCRYPTION_KEYS").split(","),
         "IDENTITY": {
             "class": "patient_access.identity.jwt_deeplink.JwtDeepLinkIdentity",
             "options": {
