@@ -9,13 +9,14 @@ restart drops), so closing the tab no longer stops a pull.
     GET  /clients/ehr-patient-portal/callback (ehr_patient_portal.py) finishes sign-in, starts the job
 """
 
+from django.http import JsonResponse
 from patient_access.core.flow import FlowError, start_upstream_auth
 from patient_access.django_apps.jobs.wiring import get_module
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.models import DataSource
+from core.models import DataSource, EhrBrandLocation
 from core.patient_access.identity import PROVIDER, participant_for
 
 
@@ -30,17 +31,28 @@ def launch(request):
         return Response({"error": "Unknown data source"}, status=400)
     # The consent screen comes first in the portal; the sketch does not re-check it here.
     m = get_module()
+    location_id = str(request.data.get("location_id", ""))
+    scopes = list(request.data.get("scopes") or [])
+    # What the checklist offered and the patient unchecked, for the receipt.
+    location = (
+        EhrBrandLocation.objects.select_related("brand__vendor").filter(id=int(location_id)).first()
+        if location_id.isdigit()
+        else None
+    )
+    offered = (location.brand.vendor.supported_scopes or "").split() if location else []
     try:
         url = start_upstream_auth(
             participant=participant_for(patient, data_source_id),
-            selection_id=str(request.data.get("location_id", "")),
+            selection_id=location_id,
             directory=m.directory,
+            keyring=m.keyring,
+            scopes_declined=[s for s in offered if s not in scopes],
             attempts=m.auth_attempts,
             redirect_uri=m.redirect_uri,
             destination=m.default_destination,
             http=m.http,
             clock=m.clock,
-            scopes=list(request.data.get("scopes") or []),
+            scopes=scopes,
         )
     except FlowError as e:
         return Response({"error": str(e)}, status=400)
@@ -82,3 +94,11 @@ def job_status(request, job_id):
     if job is None or patient is None or job.participant.provider != PROVIDER or job.participant.ref != str(patient.id):
         return Response({"error": "Not found"}, status=404)
     return Response(job_json(job))
+
+
+def jwks(request):
+    """The Patient Access Module's client signing keys (public halves), registered with EHR vendors
+    as our JWK Set URL for private_key_jwt. Separate from the OIDC provider's keys."""
+    response = JsonResponse(get_module().keyring.keys.public_jwks())
+    response["Cache-Control"] = "public, max-age=300"
+    return response

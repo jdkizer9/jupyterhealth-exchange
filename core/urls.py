@@ -63,6 +63,8 @@ urlpatterns = [
         name="apple-app-site-association",
     ),
     path(".well-known/assetlinks.json", common.assetlinks, name="assetlinks"),
+    # Patient Access Module client keys (sketch): the JWK Set URL registered with EHR vendors.
+    path(".well-known/jwks.json", patient_access.jwks, name="patient-access-jwks"),
     # Home
     path("", common.home, name="home"),
     # Django auth and accounts

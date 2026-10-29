@@ -37,13 +37,17 @@
   "vendors": {
     "Epic Sandbox": {
       "client_id": "77849e74-8e2a-4c2f-826c-bdbef6da3357",
-      "auth_method": "public",
       "base_scopes": [
         "openid",
         "profile",
         "launch/patient"
       ],
-      "profile": "epic"
+      "profile": "epic",
+      "auth_methods": [
+        {
+          "method": "public"
+        }
+      ]
     },
     "SMART Sandbox": {
       "client_id": "patient-access-sketch",
@@ -52,8 +56,12 @@
         "openid",
         "fhirUser"
       ],
-      "auth_method": "public",
-      "profile": "smart-reference"
+      "profile": "smart-reference",
+      "auth_methods": [
+        {
+          "method": "public"
+        }
+      ]
     },
     "SMART Sandbox Asymmetric": {
       "client_id": "patient-access-sketch",
@@ -62,11 +70,14 @@
         "openid",
         "fhirUser"
       ],
-      "auth_method": "private_key_jwt",
-      "private_key_path": "/code/patient-access-sketch/compose/dev-keys/smart-client-dev.pem",
-      "key_id": "sketch-1",
-      "jwt_alg": "RS384",
-      "profile": "smart-reference"
+      "profile": "smart-reference",
+      "auth_methods": [
+        {
+          "method": "private_key_jwt",
+          "kid": "sketch-1",
+          "alg": "RS384"
+        }
+      ]
     }
   },
   "seed": {
@@ -121,5 +132,17 @@
         }
       }
     ]
+  },
+  "signing_keys": {
+    "class": "patient_access.credentials.env.EnvSigningKeys",
+    "options": {
+      "keys": [
+        {
+          "kid": "sketch-1",
+          "alg": "RS384",
+          "path": "/code/patient-access-sketch/compose/dev-keys/smart-client-dev.pem"
+        }
+      ]
+    }
   }
 }
