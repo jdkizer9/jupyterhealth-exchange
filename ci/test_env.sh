@@ -6,8 +6,7 @@ export DB_PASSWORD="postgres"
 export DB_HOST="localhost"
 export DB_PORT="5432"
 export SECRET_KEY="super-secret-key"
-# Patient Access Module (sketch, scenario D): its config and a test-only Fernet key.
-export PATIENT_ACCESS_CONFIG=compose/patient-access.json
+# Patient Access Module (sketch): a test-only Fernet key; the rest of PATIENT_ACCESS is in jhe/settings.py.
 export PATIENT_ACCESS_DEPLOYMENT_KEY="7PPeQ9QMC6e3BILGOrLymnkqi3_i00plJ-PYHOL7iK4="
 export OIDC_RSA_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
 MIIJQQIBADANBgkqhkiG9w0BAQEFAASCCSswggknAgEAAoICAQC4FaxiLBy7ttiN

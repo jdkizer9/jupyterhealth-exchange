@@ -78,10 +78,119 @@ CSRF_TRUSTED_ORIGINS = [SITE_URL]
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# Patient Access Module (sketch, scenario D). From the environment only, never defaulted here:
-# compose/environment/jhe.env carries the dev values.
-PATIENT_ACCESS_CONFIG = os.getenv("PATIENT_ACCESS_CONFIG")
-PATIENT_ACCESS_DEPLOYMENT_KEY = os.getenv("PATIENT_ACCESS_DEPLOYMENT_KEY")
+# Patient Access Module (sketch): the USCDI Patient Access client's settings, the way a reusable
+# app is configured (see patient_access/django_apps/jobs/conf.py for every key). Fixed choices
+# are literal; anything deployment-specific or secret comes from the environment, never defaulted
+# here: compose/environment/jhe.env carries the dev values.
+_PA_KEYS = str(BASE_DIR / "patient-access-sketch" / "compose" / "dev-keys")
+PATIENT_ACCESS = {
+    "DEPLOYMENT_KEY": os.getenv("PATIENT_ACCESS_DEPLOYMENT_KEY"),  # Fernet: tokens and verifiers at rest
+    "IDENTITY": {"class": "core.patient_access.identity.JheUserIdentity"},
+    "DIRECTORY": {"class": "core.patient_access.directory.JheOrmDirectory"},
+    "SPOOL": {
+        "class": "patient_access.spool.local_disk.LocalDiskSpool",
+        "options": {"root": os.getenv("PATIENT_ACCESS_SPOOL_DIR", "/data/patient-access/spool")},
+    },
+    "DISPATCHER": {"class": "patient_access.dispatch.thread.ThreadDispatcher", "options": {"lease_seconds": 600}},
+    "DESTINATIONS": {
+        # JHE's own FHIR store, in-process. No Binary type, so documents stay out.
+        "jhe": {
+            "formatter": {"class": "patient_access.formatters.r4_batch.R4BatchFormatter", "options": {"chunk": 100}},
+            "sink": {"class": "core.patient_access.sink.JheDirectSink"},
+            "content": {"documents": False},
+        },
+        # The study's bucket, one per install: one document Bundle per pull.
+        "s3": {
+            "formatter": {"class": "patient_access.formatters.composition.CompositionBundleFormatter"},
+            "sink": {
+                "class": "patient_access.destinations.s3.S3Sink",
+                "options": {
+                    "bucket": os.getenv("PATIENT_ACCESS_S3_BUCKET"),
+                    "endpoint_url": os.getenv("PATIENT_ACCESS_S3_ENDPOINT_URL"),
+                    "access_key": os.getenv("PATIENT_ACCESS_S3_ACCESS_KEY_ID"),
+                    "secret_key": os.getenv("PATIENT_ACCESS_S3_SECRET_ACCESS_KEY"),
+                    "layout": "{attrs[patient_id]}/{attrs[fhir_source_id]}/{created_at:%Y%m%dT%H%M%SZ}",
+                    "create_bucket": bool(os.getenv("PATIENT_ACCESS_S3_CREATE_BUCKET")),
+                },
+            },
+        },
+    },
+    "DEFAULT_DESTINATIONS": ["jhe", "s3"],
+    "REDIRECT_URI": f"{SITE_URL}/clients/uscdi-patient-access/callback",
+    "VENDORS": {
+        # Keyed by JHE's EhrVendor names. The USCDI client has its own Epic app, so its client id
+        # lives here, not on the EhrVendor row the EHR Patient Portal uses.
+        "Epic Sandbox": {
+            "client_id": os.getenv("PATIENT_ACCESS_EPIC_SANDBOX_CLIENT_ID", ""),
+            "auth_methods": [{"method": "public"}],
+            "profile": "epic",
+            "base_scopes": ["openid", "profile", "launch/patient"],
+        },
+        "SMART Sandbox": {
+            "client_id": "patient-access-sketch",  # the SMART sandbox accepts any client id
+            "auth_methods": [{"method": "public"}],
+            "profile": "smart-reference",
+        },
+        "SMART Sandbox Asymmetric": {
+            "client_id": "patient-access-sketch",
+            "auth_methods": [{"method": "private_key_jwt", "kid": "sketch-1", "alg": "RS384"}],
+            "profile": "smart-reference",
+        },
+    },
+    # Dev signing key for the asymmetric sandbox brand; production would set PATIENT_ACCESS_SIGNING_KEYS.
+    "SIGNING_KEYS": {
+        "class": "patient_access.credentials.env.EnvSigningKeys",
+        "options": {"keys": [{"kid": "sketch-1", "alg": "RS384", "path": f"{_PA_KEYS}/smart-client-dev.pem"}]},
+    },
+    "MAX_ATTEMPTS": 3,
+    # Dev: the SMART Health IT sandbox hospitals seed_patient_access_sandbox adds to the picker.
+    "SEED": {
+        "smart_sandbox": [
+            {
+                "name": "SMART Sandbox Health",
+                "vendor": "SMART Sandbox",
+                "line": "1 Sandbox Way",
+                "city": "Boston",
+                "state": "MA",
+                "postal": "02115",
+                "launch": {"client_type": "public", "pkce": "always"},
+            },
+            {
+                "name": "SMART Sandbox Express (no login, fixed patient)",
+                "vendor": "SMART Sandbox",
+                "line": "4 Sandbox Way",
+                "city": "Cambridge",
+                "state": "MA",
+                "postal": "02139",
+                "launch": {
+                    "client_type": "public",
+                    "pkce": "always",
+                    "skip_login": True,
+                    "skip_auth": True,
+                    "patient": ["12edb5a0-ec71-45b7-aff6-0fef1c382881"],
+                },
+            },
+            {
+                "name": "SMART Sandbox Express Asymmetric (no login, fixed patient)",
+                "vendor": "SMART Sandbox Asymmetric",
+                "line": "6 Sandbox Way",
+                "city": "Cambridge",
+                "state": "MA",
+                "postal": "02139",
+                "launch": {
+                    "client_type": "confidential-asymmetric",
+                    "pkce": "auto",
+                    "jwks_public_key": f"{_PA_KEYS}/smart-client-dev.pub.pem",
+                    "kid": "sketch-1",
+                    "alg": "RS384",
+                    "skip_login": True,
+                    "skip_auth": True,
+                    "patient": ["80a75b5a-fd30-4f38-895d-d8098fe7206e"],
+                },
+            },
+        ]
+    },
+}
 
 INSTALLED_APPS = [
     "core.apps.CoreConfig",
